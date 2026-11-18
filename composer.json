@@ -1,0 +1,40 @@
+{
+    "name": "syncclass/syncclass",
+    "description": "SyncClass — classroom and subject scheduler for colleges and universities.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.1",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-pdo": "*"
+    },
+    "require-dev": {},
+    "suggest": {
+        "phpmailer/phpmailer": "SMTP delivery for email notifications (Phase 14).",
+        "dompdf/dompdf": "PDF report export (Phase 15).",
+        "phpoffice/phpspreadsheet": "Excel report export (Phase 15).",
+        "nesbot/carbon": "Date and time helpers for term, calendar and generator arithmetic."
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "platform": {
+            "php": "8.1.0"
+        }
+    },
+    "scripts": {
+        "serve": "php -S 127.0.0.1:8000 -t public",
+        "lint": "php bin/lint.php"
+    }
+}

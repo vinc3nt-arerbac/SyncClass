@@ -1,0 +1,49 @@
+# ===========================================================================
+# SyncClass — root fallback rules
+#
+# Use this file only when the host cannot point its document root at public/.
+# When the document root IS public/, Apache never reads this file.
+#
+# It does two things:
+#   1. refuses direct HTTP access to application, config, database, storage,
+#      vendor, tests and docs directories;
+#   2. forwards everything else (except public/) to public/index.php, which
+#      boots the same application as the normal entry point.
+# ===========================================================================
+
+Options -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Never serve source, configuration, SQL or logs.
+    RewriteRule ^(?:app|config|database|storage|vendor|tests|docs)(?:/|$) - [F,L]
+
+    # One internal redirect only: REDIRECT_STATUS is set after the rewrite, so
+    # the second pass falls through and index.php is executed.
+    RewriteCond %{ENV:REDIRECT_STATUS} ^$
+    RewriteCond %{REQUEST_URI} !/public/
+    RewriteRule ^ public/index.php [L,QSA]
+</IfModule>
+
+# Block the remaining project files that must not be downloadable.
+<FilesMatch "^(?:composer\.(?:json|lock)|bootstrap\.php|\.gitignore|\.htaccess)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+<FilesMatch "\.(?:sql|md|ini|log|lock)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>

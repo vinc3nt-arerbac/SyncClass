@@ -1,0 +1,21 @@
+# ===========================================================================
+# Uploaded files are data, never executable code.
+# ===========================================================================
+
+Options -Indexes -ExecCGI
+
+# Refuse any script extension regardless of how it was uploaded.
+<FilesMatch "\.(?:php|phtml|phar|php[0-9]|cgi|pl|py|sh|htaccess)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Defence in depth for mod_php hosts.
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
