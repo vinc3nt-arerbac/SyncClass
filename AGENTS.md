@@ -102,7 +102,7 @@ Local Development Environment
 
 Application Path:
 
-D:\xampp8.2\htdocs\SyncClass
+D:\xampp\htdocs\SyncClass
 
 Local URL:
 
