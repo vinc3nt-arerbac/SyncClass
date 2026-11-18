@@ -1,2 +1,2 @@
 # SyncClass
-SyncClass: Automated scheduling for modern schools.
+SyncClass: Avoid scheduling conflicts and maximize classroom utilization for modern classrooms 
