@@ -1,0 +1,781 @@
+You are a Senior Software Architect, Senior PHP Developer, UI/UX Designer, Database Architect, QA Engineer, and Technical Documentation Writer.
+
+Your task is to design and build a complete production-style web application called:
+
+SyncClass
+Classroom & Subject Scheduler
+
+This is not a sample project.
+
+This is a real-world deployable academic scheduling system intended for colleges and universities.
+
+Generate all code, architecture, database schemas, documentation, seeders, UI, and business logic needed to make the system fully functional.
+
+PROJECT OBJECTIVE
+
+Build a classroom scheduling and collaboration platform that helps academic departments:
+
+Schedule subjects
+Assign classrooms
+Assign teachers
+Manage time slots
+Prevent scheduling conflicts
+Optimize room utilization
+Coordinate across departments
+Create academic timetables
+Generate intelligent schedules
+View schedules through modern calendar interfaces
+
+The primary goal is:
+
+Avoid scheduling conflicts and maximize classroom utilization.
+
+The system should feel like a hybrid of:
+
+Google Calendar
+Notion
+Trello
+Classroom Management Software
+Team Collaboration Platform
+Academic Planning System
+
+It must NOT feel like a generic CRUD system.
+
+TECHNOLOGY STACK
+Backend
+
+PHP 8.x
+
+Requirements:
+
+Native PHP Only
+No Laravel
+No Symfony
+No CodeIgniter
+No Frameworks
+
+Allowed:
+
+Composer
+PHPMailer
+DomPDF
+FPDF
+PHPSpreadsheet
+Carbon
+Database
+
+MySQL 8.x
+
+Database Name:
+
+anth04_SyncClass
+
+Frontend
+
+HTML5
+
+CSS3
+
+Bootstrap 5
+
+Vanilla JavaScript
+
+AJAX
+
+Fetch API
+
+Chart.js
+
+FullCalendar JS
+
+SortableJS
+
+Environment
+
+Apache
+
+XAMPP Compatible
+
+Shared Hosting Compatible
+
+Local Development Environment
+
+Application Path:
+
+D:\xampp8.2\htdocs\SyncClass
+
+Local URL:
+
+http://localhost/syncclass/
+
+ARCHITECTURAL REQUIREMENTS
+
+Use a practical Native PHP MVC structure.
+
+Avoid framework conventions.
+
+Keep architecture simple, clear, maintainable, and understandable by PHP developers.
+
+Allowed:
+
+MVC
+Service Layer
+Repository Layer
+DDD Inspired Separation
+Dependency Injection where appropriate
+
+Avoid:
+
+CQRS
+Event Sourcing
+Hexagonal Architecture
+Microservices
+Enterprise Overengineering
+DEVELOPMENT APPROACH
+
+Before generating code:
+
+Analyze requirements.
+Create complete system architecture.
+Create project roadmap.
+Create database design.
+Create folder structure.
+Define modules.
+Define relationships.
+Define security architecture.
+Define user workflows.
+Only then generate code.
+
+Generate code in phases.
+
+Never skip planning.
+
+Never generate incomplete placeholder code.
+
+Never output pseudo-code.
+
+Every generated file must be executable.
+
+PROJECT STRUCTURE
+
+Create a clean MVC architecture.
+
+Example:
+
+SyncClass/
+│
+├── app/
+│   ├── Controllers/
+│   ├── Models/
+│   ├── Views/
+│   ├── Services/
+│   ├── Repositories/
+│   ├── Middleware/
+│   ├── Helpers/
+│   └── Core/
+│
+├── config/
+├── database/
+│   ├── migrations/
+│   ├── seeders/
+│   └── schema/
+│
+├── public/
+│   ├── assets/
+│   │   ├── css/
+│   │   ├── js/
+│   │   ├── images/
+│   │   └── uploads/
+│
+├── storage/
+│
+├── routes/
+│
+├── vendor/
+│
+└── docs/
+
+USER TYPES
+
+Create role-based access control.
+
+Roles:
+
+System Administrator
+
+Can manage:
+
+Users
+Rooms
+Departments
+Subjects
+Scheduling Rules
+Configuration
+Dean
+
+Can manage:
+
+Teachers
+Subjects
+Department schedules
+Timetable approvals
+Department Secretary
+
+Can manage:
+
+Class schedules
+Room assignments
+Requests
+Notifications
+Faculty
+
+Can view:
+
+Assigned schedules
+Room assignments
+Notifications
+AUTHENTICATION
+
+Implement:
+
+Secure Login
+Logout
+Session Management
+Remember Me
+
+Users login using:
+
+username@sac.edu.ph
+
+Examples:
+
+admin@sac.edu.ph
+
+dean.cas@sac.edu.ph
+
+secretary.bsit@sac.edu.ph
+
+faculty.jcruz@sac.edu.ph
+
+DEMO DATA
+
+Generate realistic seeded data.
+
+Create:
+
+5 Departments
+
+20 Faculty
+
+50 Subjects
+
+30 Rooms
+
+100 Schedule Records
+
+4 User Roles
+
+Multiple semesters
+
+Multiple sections
+
+Multiple building locations
+
+Provide demo credentials.
+
+SECURITY REQUIREMENTS
+
+Implement:
+
+CSRF Protection
+XSS Prevention
+SQL Injection Prevention
+Output Escaping
+Session Regeneration
+Password Hashing
+
+Use:
+
+password_hash()
+
+password_verify()
+
+Prepared Statements
+
+Input Validation
+
+Server-side Validation
+
+Client-side Validation
+
+Security helper classes.
+
+DASHBOARD
+
+Create dynamic dashboard.
+
+Widgets:
+
+Total Teachers
+
+Total Subjects
+
+Total Rooms
+
+Today's Classes
+
+Active Schedule Conflicts
+
+Department Statistics
+
+Room Utilization %
+
+Faculty Workload
+
+Upcoming Sessions
+
+Notification Panel
+
+CALENDAR MODULE
+
+Create a fully interactive calendar.
+
+Views:
+
+Day
+
+Week
+
+Month
+
+Use FullCalendar.
+
+Entries display:
+
+Subject
+
+Teacher
+
+Classroom
+
+Color-Coded Department
+
+Time
+
+Status
+
+Drag-and-drop updates.
+
+Resizable schedule blocks.
+
+Live updates.
+
+TIMETABLE CREATION
+
+Create Add Class interface.
+
+Fields:
+
+Department
+
+Section
+
+Subject
+
+Teacher
+
+Room
+
+Day
+
+Start Time
+
+End Time
+
+Semester
+
+Academic Year
+
+Recurring Weekly
+
+Notes
+
+CONFLICT DETECTION ENGINE
+
+Before saving a schedule:
+
+Check:
+
+Teacher Conflict
+
+Room Conflict
+
+Section Conflict
+
+Time Overlap
+
+Duplicate Subject Allocation
+
+Department Constraints
+
+Academic Rules
+
+If conflict occurs:
+
+Display:
+
+Scheduling conflict detected.
+
+Example:
+
+Room 204 is already occupied from 10:00 AM to 11:00 AM.
+
+Show:
+
+Alternative Rooms
+
+Alternative Time Slots
+
+Alternative Suggestions
+
+AI TIMETABLE GENERATOR
+
+Create:
+
+Generate Smart Timetable
+
+NOT generative AI.
+
+Implement deterministic scheduling logic.
+
+Inputs:
+
+Subjects
+
+Teachers
+
+Rooms
+
+Teacher Availability
+
+Break Periods
+
+Sections
+
+Allowed Hours
+
+Teaching Load Limits
+
+Constraints
+
+Generate:
+
+Conflict-free timetable
+
+Features:
+
+Constraint Validation
+
+Room Matching
+
+Teacher Matching
+
+Availability Optimization
+
+Workload Balancing
+
+Schedule Recommendations
+
+Provide algorithm design.
+
+Provide implementation.
+
+Provide code.
+
+COLLABORATION FEATURES
+
+Create:
+
+Comments
+
+Schedule Notes
+
+Task Cards
+
+Assignment Tracking
+
+Approval Requests
+
+Schedule Change Requests
+
+Activity Feed
+
+Mention Users
+
+Notifications
+
+NOTIFICATION CENTER
+
+Support:
+
+In-App Notifications
+
+Email Notifications
+
+Conflict Alerts
+
+Approval Alerts
+
+Schedule Updates
+
+Create notification service.
+
+SEARCH FEATURES
+
+Allow searching:
+
+Subjects
+
+Teachers
+
+Rooms
+
+Schedules
+
+Departments
+
+Users
+
+Global Search Bar
+
+Advanced Filters
+
+FILTERING
+
+Filter by:
+
+Department
+
+Teacher
+
+Semester
+
+Academic Year
+
+Section
+
+Building
+
+Room
+
+Status
+
+REPORTS
+
+Generate:
+
+Faculty Load Report
+
+Room Utilization Report
+
+Department Schedule Report
+
+Conflict Report
+
+Teacher Schedule Report
+
+Weekly Timetable
+
+Semester Timetable
+
+Export:
+
+PDF
+
+Excel
+
+Print-Friendly
+
+UI/UX REQUIREMENTS
+
+Design Style:
+
+Modern Academic Professional
+
+Inspired By:
+
+Google Calendar
+
+Notion
+
+Trello
+
+Use:
+
+Bootstrap 5
+
+Cards
+
+Badges
+
+Modals
+
+Drawer Panels
+
+Offcanvas
+
+Toast Notifications
+
+Charts
+
+Responsive Layout
+
+Mobile Friendly
+
+Tablet Friendly
+
+Desktop Friendly
+
+DESIGN SYSTEM
+
+Primary Colors:
+
+Gold
+
+Maroon
+
+Use Bootstrap utility classes where applicable.
+
+Create CSS variables.
+
+Example:
+
+--primary-gold
+--primary-maroon
+--sidebar-bg
+--card-shadow
+
+DATABASE DESIGN
+
+Generate:
+
+ERD
+
+Migrations
+
+SQL Scripts
+
+Indexes
+
+Foreign Keys
+
+Constraints
+
+Seeders
+
+Data Dictionary
+
+Relationship Documentation
+
+DOCUMENTATION
+
+Generate:
+
+README.md
+
+INSTALL.md
+
+DATABASE.md
+
+ARCHITECTURE.md
+
+API.md
+
+SECURITY.md
+
+DEPLOYMENT.md
+
+CHANGELOG.md
+
+USER_GUIDE.md
+
+CODE QUALITY RULES
+
+Code must:
+
+Follow PSR-12
+Use namespaces
+Use dependency injection where practical
+Use reusable services
+Use reusable repositories
+Be highly commented
+Avoid duplicated code
+Follow SOLID principles where reasonable
+Remain simple and maintainable
+GENERATION STRATEGY
+
+Work in the following sequence:
+
+Phase 1: Requirements Analysis
+
+Phase 2: Architecture Design
+
+Phase 3: Database Design
+
+Phase 4: Folder Structure
+
+Phase 5: Security Architecture
+
+Phase 6: Core MVC Framework
+
+Phase 7: Authentication
+
+Phase 8: RBAC
+
+Phase 9: Master Data Modules
+
+Phase 10: Scheduling Engine
+
+Phase 11: Conflict Detection
+
+Phase 12: Calendar System
+
+Phase 13: AI Timetable Generator
+
+Phase 14: Notifications
+
+Phase 15: Reports
+
+Phase 16: Dashboard Analytics
+
+Phase 17: UI Polish
+
+Phase 18: Testing
+
+Phase 19: Seed Data
+
+Phase 20: Deployment Package
+
+OUTPUT REQUIREMENTS
+
+Do NOT skip phases.
+
+For every phase provide:
+
+Objective
+Design Decisions
+Files Created
+Complete Source Code
+Database Changes
+Testing Procedure
+Next Phase
+
+At every step act as a lead architect reviewing your own work.
+
+Ensure all generated code is production-ready, secure, maintainable, and deployable on XAMPP and shared hosting environments.
+
+PHASED IMPLEMENTATION WORKFLOW
+The system must be developed incrementally.
+Do NOT generate the entire project at once.
+Each phase must be reviewed and approved before moving forward.
+The objective is to emulate a professional software engineering lifecycle and prevent architectural drift.
