@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Core;
 
 use App\Middleware\Authenticate;
+use App\Middleware\Authorize;
 use App\Middleware\Guest;
 use App\Middleware\StartSession;
 use App\Middleware\VerifyCsrfToken;
+use App\Repositories\PermissionRepository;
+use App\Services\AuthorizationService;
 use Closure;
 use RuntimeException;
 use Throwable;
@@ -118,7 +121,8 @@ final class Kernel
                 ->withAttribute('route_name', $route->routeName())
                 ->withAttribute('route_path', $route->path())
                 ->withAttribute('route_summary', $route->summary())
-                ->withAttribute('route_middleware', $route->middlewareAliases());
+                ->withAttribute('route_middleware', $route->middlewareAliases())
+                ->withAttribute('route_rules', $this->authorizationRules($route->middlewareAliases()));
 
             $middleware = array_merge($this->globalMiddleware, $this->expandMiddleware($route->middlewareAliases()));
 
@@ -270,8 +274,15 @@ final class Kernel
     }
 
     /**
-     * Translate route middleware aliases into class names. Unknown aliases are
-     * passed through so a fully-qualified class name also works.
+     * Translate route middleware entries into class names.
+     *
+     * Plain aliases (`auth`, `guest`, …) resolve through the table. The two
+     * parameterised aliases — `permission:a,b` and `role:x,y` — resolve to the
+     * single Authorize middleware, which reads the parsed rules from the
+     * `route_rules` request attribute. Authorize keeps the position the first
+     * parameterised alias occupied, so `['auth', 'permission:…']` runs the
+     * permission check after authentication. Unknown aliases are passed
+     * through so a fully-qualified class name also works.
      *
      * @param array<int, string> $aliases
      * @return array<int, string>
@@ -281,10 +292,66 @@ final class Kernel
         $resolved = [];
 
         foreach ($aliases as $alias) {
+            if ($this->isAuthorizationAlias($alias)) {
+                if (!in_array(Authorize::class, $resolved, true)) {
+                    $resolved[] = Authorize::class;
+                }
+
+                continue;
+            }
+
             $resolved[] = $this->middlewareAliases[$alias] ?? $alias;
         }
 
         return $resolved;
+    }
+
+    /**
+     * Parse `permission:` / `role:` entries into one rule set.
+     *
+     * Values are lower-cased and de-duplicated. A missing value is kept as an
+     * empty rule set on purpose: the route declared authorisation but named no
+     * capability, and Authorize answers that misconfiguration with 403 instead
+     * of letting the page through.
+     *
+     * @param array<int, string> $aliases
+     * @return array{permissions: array<int, string>, roles: array<int, string>}
+     */
+    private function authorizationRules(array $aliases): array
+    {
+        $permissions = [];
+        $roles = [];
+
+        foreach ($aliases as $alias) {
+            if (!str_contains($alias, ':')) {
+                continue;
+            }
+
+            [$name, $values] = explode(':', $alias, 2);
+
+            $parsed = array_values(array_filter(array_map(
+                static fn (string $value): string => strtolower(trim($value)),
+                explode(',', $values)
+            ), static fn (string $value): bool => $value !== ''));
+
+            if ($name === 'permission') {
+                $permissions = array_merge($permissions, $parsed);
+            } elseif ($name === 'role') {
+                $roles = array_merge($roles, $parsed);
+            }
+        }
+
+        return [
+            'permissions' => array_values(array_unique($permissions)),
+            'roles' => array_values(array_unique($roles)),
+        ];
+    }
+
+    private function isAuthorizationAlias(string $alias): bool
+    {
+        $name = explode(':', $alias, 2)[0];
+
+        return $name === 'permission' || $name === 'role';
     }
 
     private function registerBindings(): void
@@ -308,6 +375,13 @@ final class Kernel
             (array) $container->get(Config::class)->get('security', [])
         ));
 
+        // One grant cache per request: the middleware, every controller and
+        // every `$can()` call in a view must agree, and must not each pay for
+        // the role_permissions query.
+        $this->container->singleton(AuthorizationService::class, static fn (Container $container): AuthorizationService => new AuthorizationService(
+            $container->get(PermissionRepository::class)
+        ));
+
         $assetBase = $this->assetBase();
 
         $this->container->singleton(View::class, static fn (Container $container): View => new View(
@@ -315,7 +389,8 @@ final class Kernel
             $container->get(Security::class),
             $container->get(Session::class),
             $container->get(Router::class),
-            $assetBase
+            $assetBase,
+            $container->get(AuthorizationService::class)
         ));
     }
 
@@ -331,6 +406,12 @@ final class Kernel
             'csrf' => VerifyCsrfToken::class,
             'auth' => Authenticate::class,
             'guest' => Guest::class,
+            // Parameterised aliases (`permission:users.view`, `role:dean`)
+            // also resolve to Authorize; listed here for completeness so the
+            // alias table documents every name a route may use.
+            'authorize' => Authorize::class,
+            'permission' => Authorize::class,
+            'role' => Authorize::class,
         ];
     }
 

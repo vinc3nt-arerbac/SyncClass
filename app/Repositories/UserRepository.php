@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use App\Core\Database;
+use App\Services\Scope;
 
 /**
  * Users and their authentication state (AUTH-01…AUTH-07).
@@ -62,6 +63,146 @@ final class UserRepository
     public function isActive(array $user): bool
     {
         return (int) ($user['is_active'] ?? 0) === 1;
+    }
+
+    /**
+     * Load one account only if it is inside the caller's scope.
+     *
+     * This is the object-level half of RBAC: the permission says the user may
+     * view accounts, the scope says *which* ones. A miss returns null so the
+     * controller answers 404 — a dean must not be able to tell an account in
+     * another department from an account that does not exist.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findByIdInScope(Scope $scope, int $id): ?array
+    {
+        [$where, $bindings] = $this->scopeClause($scope, 'u');
+
+        return $this->database->selectOne(
+            self::SELECT_COLUMNS . ' WHERE u.id = :id AND ' . $where . ' LIMIT 1',
+            array_replace(['id' => $id], $bindings)
+        );
+    }
+
+    /**
+     * A page of accounts inside the caller's scope, newest first.
+     *
+     * Filters are applied in SQL after the scope clause, never instead of it:
+     * a client-supplied `department_id` can only narrow what the scope already
+     * allows, so a dean cannot widen their view by editing the query string.
+     *
+     * @param array{search?: string, department_id?: int|null, role_code?: string, is_active?: bool|null} $filters
+     * @return array<int, array<string, mixed>>
+     */
+    public function paginateForScope(Scope $scope, array $filters = [], int $limit = 25, int $offset = 0): array
+    {
+        [$where, $bindings] = $this->filterClause($scope, $filters);
+
+        $limit = max(1, min(100, $limit));
+        $offset = max(0, $offset);
+
+        return $this->database->select(
+            self::SELECT_COLUMNS . ' WHERE ' . $where
+            . ' ORDER BY u.last_name, u.first_name, u.id LIMIT ' . $limit . ' OFFSET ' . $offset,
+            $bindings
+        );
+    }
+
+    /**
+     * Total rows that paginateForScope() would return for the same filters.
+     *
+     * @param array{search?: string, department_id?: int|null, role_code?: string, is_active?: bool|null} $filters
+     */
+    public function countForScope(Scope $scope, array $filters = []): int
+    {
+        [$where, $bindings] = $this->filterClause($scope, $filters);
+
+        return (int) $this->database->scalar(
+            'SELECT COUNT(*) FROM users u INNER JOIN roles r ON r.id = u.role_id WHERE ' . $where,
+            $bindings
+        );
+    }
+
+    /**
+     * SQL fragment implementing the scope, shared by every scoped query.
+     *
+     * Administrator → no restriction. Faculty → own row only. Everyone else →
+     * their department; a user without a department matches nothing, which is
+     * the safe reading of an incomplete profile.
+     *
+     * @return array{0: string, 1: array<string, mixed>}
+     */
+    private function scopeClause(Scope $scope, string $alias = 'u'): array
+    {
+        if ($scope->isAdministrator()) {
+            return ['1 = 1', []];
+        }
+
+        if ($scope->isSelfOnly()) {
+            return [$alias . '.id = :scope_user_id', ['scope_user_id' => $scope->userId()]];
+        }
+
+        if ($scope->departmentId() === null) {
+            return ['1 = 0', []];
+        }
+
+        return [$alias . '.department_id = :scope_department_id', ['scope_department_id' => $scope->departmentId()]];
+    }
+
+    /**
+     * Scope clause plus the optional list filters.
+     *
+     * @param array{search?: string, department_id?: int|null, role_code?: string, is_active?: bool|null} $filters
+     * @return array{0: string, 1: array<string, mixed>}
+     */
+    private function filterClause(Scope $scope, array $filters): array
+    {
+        [$where, $bindings] = $this->scopeClause($scope, 'u');
+
+        $search = trim((string) ($filters['search'] ?? ''));
+
+        if ($search !== '') {
+            // Native prepared statements (MySQL with emulation off) do not
+            // allow one named placeholder to be repeated, so each column gets
+            // its own binding. `!` is the escape character because it needs no
+            // backslash processing and therefore behaves identically on MySQL
+            // and on the SQLite database the tests use.
+            $term = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search) . '%';
+
+            $where .= ' AND (u.email LIKE :search_email ESCAPE \'!\''
+                . ' OR u.first_name LIKE :search_first ESCAPE \'!\''
+                . ' OR u.last_name LIKE :search_last ESCAPE \'!\''
+                . ' OR u.username LIKE :search_username ESCAPE \'!\')';
+
+            $bindings['search_email'] = $term;
+            $bindings['search_first'] = $term;
+            $bindings['search_last'] = $term;
+            $bindings['search_username'] = $term;
+        }
+
+        $roleCode = strtolower(trim((string) ($filters['role_code'] ?? '')));
+
+        if ($roleCode !== '') {
+            $where .= ' AND r.code = :role_code';
+            $bindings['role_code'] = $roleCode;
+        }
+
+        $departmentId = $filters['department_id'] ?? null;
+
+        if ($departmentId !== null) {
+            $where .= ' AND u.department_id = :department_id';
+            $bindings['department_id'] = (int) $departmentId;
+        }
+
+        $isActive = $filters['is_active'] ?? null;
+
+        if ($isActive !== null) {
+            $where .= ' AND u.is_active = :is_active';
+            $bindings['is_active'] = $isActive ? 1 : 0;
+        }
+
+        return [$where, $bindings];
     }
 
     /**

@@ -288,7 +288,10 @@ The `assets/js` fetch wrapper (Phase 17) reads the meta tag and sends the header
 
 ## 9. Authorisation
 
-Authentication answers *who*; authorisation answers *what*. The design (implemented in Phase 8) is:
+Authentication answers *who*; authorisation answers *what*. Implemented in Phase 8 as
+`App\Services\AuthorizationService` (decisions), `App\Middleware\Authorize` (route rules),
+`App\Services\Scope` (data scope) and `config/permissions.php` + `bin/sync-rbac.php`
+(catalogue and matrix). The rules are:
 
 1. **Role ceiling.** Four roles: administrator, dean, secretary, faculty. Permissions are rows (`permissions.code`, e.g. `schedule.approve`), mapped through `role_permissions`. Role checks are route middleware (`role:administrator,dean`) and service-level `authorize()` calls.
 2. **Department scope.** Every non-administrator request resolves a `Scope` value object (`department_id`, `user_id`, `is_admin`). Repositories take the scope as a required argument and add the `WHERE` clause themselves. There is no "scope optional" code path.
@@ -297,7 +300,33 @@ Authentication answers *who*; authorisation answers *what*. The design (implemen
 5. **Deny by default.** Unmapped routes and unknown permissions are refused. Permissions are additive; no role implies another.
 6. **No client-supplied identity.** `actor_id`, `role_id` and `department_id` always come from the session, never from the request body. `Validator` allow-lists protect against mass assignment.
 
-The RBAC matrix itself is in `docs/REQUIREMENTS.md` §4.
+**Route syntax.** `['auth', 'permission:users.view']`, `'permission:schedules.create,schedules.update'`
+(any-of), or `['auth', 'role:administrator,dean']`. The Kernel parses the parameterised
+alias into `route_rules` and runs `Authorize` where the alias appeared, so `auth` is
+always resolved first. A route that runs `Authorize` without declaring a rule is refused
+(403): misconfiguration fails closed.
+
+**Unknown code = denied, for everyone.** `AuthorizationService` has no administrator
+bypass — the administrator role holds an explicit list of every catalogued code. A route
+guarded by a code that is not in `permissions` therefore locks the page instead of
+silently granting it to the highest role. Adding a capability is a two-step change: add it
+to `config/permissions.php`, then run `php bin/sync-rbac.php`.
+
+**Scope is applied in SQL.** Repositories take an `App\Services\Scope` and build the
+`WHERE` clause themselves; there is no optional-scope path. Administrator → no filter,
+dean/secretary → `department_id = :scope_department_id`, faculty → `id = :scope_user_id`,
+and a non-administrator without a department matches nothing. Client-supplied filters can
+only narrow what the scope already allows.
+
+**Audit.** Every refusal writes `authz.denied` to `activity_log` with the route, the
+required permissions/roles, the actor and the IP. Probe attempts are therefore visible
+after the fact, not just blocked in the moment.
+
+**Views.** `$can('users.create')` hides controls the user cannot use. It is convenience
+only: the route and any service-level `authorize()` call remain authoritative.
+
+The RBAC matrix itself is in `docs/REQUIREMENTS.md` §4; the codes and grants are in
+`config/permissions.php`.
 
 ---
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core;
 
+use App\Services\AuthorizationService;
 use RuntimeException;
 
 /**
@@ -21,6 +22,7 @@ use RuntimeException;
  *   $security                   the Security service (csrfField, nonce, …)
  *   $csrf_meta                  <meta name="csrf-token">, '' without a session
  *   $csrf_field()               hidden input for forms
+ *   $can('users.view')          whether the signed-in user holds a permission
  *
  * Layouts receive the rendered template as $content.
  */
@@ -29,12 +31,17 @@ final class View
     /** @var array<string, mixed> Data shared with every view (app name, nav counts…). */
     private array $shared = [];
 
+    /**
+     * @param AuthorizationService|null $authorization Optional so a bare View
+     *        can still be built in a unit test; without it `$can()` is false.
+     */
     public function __construct(
         private readonly string $viewsPath,
         private readonly Security $security,
         private readonly Session $session,
         private readonly Router $router,
-        private readonly string $assetBase = '/assets'
+        private readonly string $assetBase = '/assets',
+        private readonly ?AuthorizationService $authorization = null
     ) {
     }
 
@@ -73,6 +80,17 @@ final class View
         $scope['security'] = $this->security;
         $scope['csrf_meta'] = $this->session->isStarted() ? $this->security->csrfMeta() : '';
         $scope['csrf_field'] = fn (): string => $this->security->csrfField();
+
+        // Views hide what the user cannot operate instead of rendering a
+        // button that answers 403. This is convenience only: every guarded
+        // route and service check is authoritative, so a hand-crafted POST
+        // still fails.
+        $scope['can'] = function (string $permission): bool {
+            $user = $this->shared['auth_user'] ?? null;
+
+            return $this->authorization !== null
+                && $this->authorization->can(is_array($user) ? $user : null, $permission);
+        };
 
         $content = $this->evaluate($template, $scope);
 

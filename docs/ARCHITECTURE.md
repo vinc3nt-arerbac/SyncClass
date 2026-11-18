@@ -308,6 +308,8 @@ Exports are generated to `storage/exports/` with a signed, expiring filename and
 
 **Implementation:** Phase 5 delivers the enforcement points as `App\Core\Security`, `App\Core\Session`, `App\Helpers\Validator` and `config/security.php`; the full control catalogue, threat model, API reference and verification procedure live in `docs/SECURITY.md`. Phase 6 wires them into the request: the Kernel sends `Security::securityHeaders()` on every response and marks them `no-store`; `StartSession` runs globally; `VerifyCsrfToken` guards every non-safe method (419 on failure); `Authenticate` guards `auth:` routes (401 JSON or a 302 to the login route).
 
+Phase 8 implements authorisation end to end: `config/permissions.php` declares the catalogue and the role matrix, `bin/sync-rbac.php` writes it to `permissions`/`role_permissions`, `AuthorizationService` answers decisions with deny-by-default semantics (no wildcard, no administrator bypass), `Authorize` enforces `permission:`/`role:` route rules and audits refusals as `authz.denied`, and `App\Services\Scope` is passed into repository queries so department and self filtering happens in SQL rather than in templates.
+
 **Threat-model highlights:** privilege escalation by ID enumeration (mitigated by scope-filtered repository fetch returning 404, not 403, for out-of-scope IDs); conflict bypass via API (all writes share `ScheduleService`); CSV/Excel formula injection (prefix `= + - @` cells).
 
 ---

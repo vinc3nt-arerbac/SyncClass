@@ -11,6 +11,7 @@
  * @var callable(mixed): string $e
  * @var callable(string): string $asset
  * @var callable(string, array<string, mixed>): string $route
+ * @var callable(string): bool $can
  * @var string $csrf_meta
  * @var string $content
  * @var string $title
@@ -37,6 +38,19 @@ $authUser = $auth_user ?? null;
     </a>
     <nav class="topnav" aria-label="Primary">
         <a href="<?= $e($route('home')) ?>">Overview</a>
+
+        <?php if (is_array($authUser) && $can('schedules.view')): ?>
+            <a href="<?= $e($route('schedules.index')) ?>">Schedules</a>
+        <?php endif; ?>
+
+        <?php if (is_array($authUser) && $can('departments.view')): ?>
+            <a href="<?= $e($route('master.departments.index')) ?>">Master data</a>
+        <?php endif; ?>
+
+        <?php if (is_array($authUser) && $can('users.view')): ?>
+            <a href="<?= $e($route('admin.users.index')) ?>">People</a>
+        <?php endif; ?>
+
         <a href="<?= $e($route('health')) ?>">Health</a>
 
         <?php if (is_array($authUser)): ?>

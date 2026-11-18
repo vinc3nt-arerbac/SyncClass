@@ -18,7 +18,9 @@ use App\Core\Database;
 
 /**
  * Create the tables used by UserRepository, LoginAttemptRepository,
- * RememberTokenRepository, AuditRepository and RoleRepository.
+ * RememberTokenRepository, AuditRepository and RoleRepository — plus the
+ * Phase 8 RBAC tables (permissions, role_permissions), so the same fixture
+ * serves tests/auth_test.php, tests/rbac_test.php and the framework suite.
  */
 function auth_schema(Database $database): void
 {
@@ -87,6 +89,20 @@ function auth_schema(Database $database): void
             user_agent TEXT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )',
+        'CREATE TABLE permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL UNIQUE,
+            module TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )',
+        'CREATE TABLE role_permissions (
+            role_id INTEGER NOT NULL,
+            permission_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (role_id, permission_id)
+        )',
         'CREATE TABLE activity_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             actor_id INTEGER NULL,
@@ -139,7 +155,7 @@ function auth_create_user(Database $database, array $overrides = []): int
 
     return $database->insert('users', [
         'role_id' => $roleId,
-        'department_id' => null,
+        'department_id' => isset($overrides['department_id']) ? (int) $overrides['department_id'] : null,
         'email' => $email,
         'username' => (string) ($overrides['username'] ?? (strstr($email, '@', true) ?: 'user')),
         'password_hash' => (string) ($overrides['password_hash'] ?? password_hash($password, PASSWORD_BCRYPT, ['cost' => 4])),

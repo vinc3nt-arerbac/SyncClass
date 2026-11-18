@@ -642,3 +642,206 @@ tbody tr:hover {
         display: none;
     }
 }
+
+/* RBAC directory (Phase 8) ------------------------------------------------ */
+
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.75rem;
+    margin: 0 0 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.filters label {
+    display: grid;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+}
+
+.filters input,
+.filters select {
+    min-width: 12rem;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    font: inherit;
+    font-size: 0.86rem;
+    background: var(--surface);
+    color: inherit;
+}
+
+.pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+
+.tag-ok {
+    background: rgb(32 122 74 / 12%);
+    color: #17603a;
+}
+
+.tag-muted {
+    background: rgb(100 100 100 / 10%);
+    color: var(--muted);
+}
+
+/* Master data (Phase 9) --------------------------------------------------- */
+
+.subnav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0 0 1.25rem;
+    padding: 0.4rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    box-shadow: var(--card-shadow);
+}
+
+.subnav a {
+    padding: 0.35rem 0.7rem;
+    border-radius: 0.5rem;
+    color: var(--muted);
+    font-size: 0.84rem;
+    text-decoration: none;
+}
+
+.subnav a:hover {
+    background: rgb(201 162 39 / 12%);
+    color: var(--primary-maroon);
+}
+
+.alert-ok {
+    background: rgb(31 122 77 / 10%);
+    border: 1px solid rgb(31 122 77 / 30%);
+    color: #17603a;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 0.9rem 1rem;
+    margin: 0 0 1.25rem;
+}
+
+.field {
+    display: grid;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.field input,
+.field select,
+.field textarea {
+    padding: 0.5rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    font: inherit;
+    font-size: 0.9rem;
+    background: var(--surface);
+    color: var(--ink);
+}
+
+.field textarea {
+    min-height: 5.5rem;
+    resize: vertical;
+}
+
+.field-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.86rem;
+    color: var(--ink);
+}
+
+.form-actions {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+}
+
+.inline-form {
+    display: inline;
+    margin: 0;
+}
+
+.row-actions {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.table-actions a,
+.table-actions button {
+    font-size: 0.8rem;
+}
+
+.swatch {
+    display: inline-block;
+    width: 0.6rem;
+    height: 0.6rem;
+    margin-right: 0.35rem;
+    border-radius: 999px;
+    vertical-align: middle;
+}
+
+/* Scheduling (Phase 10) --------------------------------------------------- */
+
+.fieldset {
+    margin: 0;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 0.7rem;
+}
+
+.fieldset legend {
+    padding: 0 0.4rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.day-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1.1rem;
+}
+
+.status-actions {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.status-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 0.6rem;
+    background: var(--canvas);
+}
+
+.status-form .field {
+    flex: 1 1 14rem;
+}
+
+.status-draft { background: rgb(107 91 75 / 12%); color: var(--muted); }
+.status-pending { background: #fdf4dd; color: #8a6100; }
+.status-approved { background: rgb(31 122 77 / 12%); color: #17603a; }
+.status-published { background: rgb(31 122 77 / 20%); color: #0f4726; }
+.status-rejected { background: #fdecea; color: #8c2318; }
+.status-cancelled { background: rgb(43 33 24 / 10%); color: #6b5b4b; text-decoration: line-through; }

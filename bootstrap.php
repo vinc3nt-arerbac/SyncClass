@@ -17,7 +17,7 @@ declare(strict_types=1);
  * constants and the return contract (a configuration array) stay the same so
  * the front controllers do not change.
  *
- * @return array{app: array<string, mixed>, database: array<string, mixed>, mail: array<string, mixed>, schedule: array<string, mixed>, security: array<string, mixed>}
+ * @return array{app: array<string, mixed>, database: array<string, mixed>, mail: array<string, mixed>, schedule: array<string, mixed>, security: array<string, mixed>, permissions: array<string, mixed>}
  */
 
 define('BASE_PATH', __DIR__);
@@ -49,6 +49,9 @@ $config = [
     'mail' => require BASE_PATH . '/config/mail.php',
     'schedule' => require BASE_PATH . '/config/schedule.php',
     'security' => require BASE_PATH . '/config/security.php',
+    // Catalogue and role matrix (Phase 8), written to the database by
+    // `php bin/sync-rbac.php`; read at runtime by AuthorizationService.
+    'permissions' => require BASE_PATH . '/config/permissions.php',
 ];
 
 // Local overrides are merged last so a deployment never edits tracked files.

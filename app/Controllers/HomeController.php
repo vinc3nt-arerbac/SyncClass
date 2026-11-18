@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Core\Config;
 use App\Core\Controller;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Route;
+use App\Core\Router;
+use App\Core\View;
+use App\Services\AuthorizationService;
+use App\Services\Scope;
 
 /**
  * The application's landing page (Phase 6).
@@ -20,6 +25,16 @@ use App\Core\Route;
  */
 final class HomeController extends Controller
 {
+    public function __construct(
+        Request $request,
+        View $view,
+        Router $router,
+        Config $config,
+        private readonly AuthorizationService $authorization
+    ) {
+        parent::__construct($request, $view, $router, $config);
+    }
+
     public function index(Request $request): Response
     {
         $routes = array_map(
@@ -42,6 +57,8 @@ final class HomeController extends Controller
         return $this->view('home/index', [
             'title' => 'Scheduler overview',
             'user' => is_array($user) ? $user : null,
+            'permissions' => is_array($user) ? $this->authorization->permissionsFor($user) : [],
+            'scope_label' => is_array($user) ? Scope::forUser($user)->label() : '—',
             'base_url' => (string) $this->config->get('app.url', ''),
             'environment' => (string) $this->config->get('app.env', 'local'),
             'debug' => (bool) $this->config->get('app.debug', false),

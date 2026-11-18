@@ -12,12 +12,14 @@
  * @var callable(): string $csrf_field
  * @var array<int, array{methods: string, path: string, name: string, handler: string, middleware: string}> $routes
  * @var array<int, string> $middleware_chain Class short names, in execution order, as run by the Kernel.
+ * @var array<int, string> $permissions Permission codes granted to the signed-in role (Phase 8).
+ * @var string $scope_label Human label for the user's data scope.
  */
 
 $middlewareChain = $middleware_chain;
 ?>
 <section class="hero">
-    <p class="eyebrow">Phase 7 · Authentication</p>
+    <p class="eyebrow">Phase 8 · Role-based access</p>
     <h1>
         <?php if ($user !== null): ?>
             Welcome back, <?= $e($user['first_name']) ?>.
@@ -113,6 +115,40 @@ $middlewareChain = $middleware_chain;
             A successful post returns JSON: <code>{"ok":true,"csrf":"verified",…}</code>
         </p>
     </section>
+
+    <section class="card">
+        <header class="card-head">
+            <h2>Your access</h2>
+            <span class="tag"><?= $e(count($permissions)) ?> permissions</span>
+        </header>
+        <?php if ($user !== null): ?>
+            <dl class="facts">
+                <div>
+                    <dt>Role</dt>
+                    <dd><code><?= $e($user['role_code']) ?></code> · <?= $e($user['role_name']) ?></dd>
+                </div>
+                <div>
+                    <dt>Data scope</dt>
+                    <dd><?= $e($scope_label) ?></dd>
+                </div>
+                <div>
+                    <dt>Department</dt>
+                    <dd><?= $e($user['department_name'] ?? 'Institution-wide') ?></dd>
+                </div>
+            </dl>
+            <p class="hint">
+                Granted by <code>config/permissions.php</code> and stored in <code>role_permissions</code>.
+                A permission that is not in the catalogue is denied to every role, including the administrator.
+            </p>
+            <ul class="badges">
+                <?php foreach ($permissions as $permission): ?>
+                    <li><code><?= $e($permission) ?></code></li>
+                <?php endforeach; ?>
+            </ul>
+        <?php else: ?>
+            <p class="muted">Sign in to see the permissions of your role.</p>
+        <?php endif; ?>
+    </section>
 </div>
 
 <section class="card">
@@ -149,19 +185,17 @@ $middlewareChain = $middleware_chain;
 <section class="card">
     <header class="card-head">
         <h2>What this phase installed</h2>
-        <span class="tag">Phase 6</span>
+        <span class="tag">Phase 8</span>
     </header>
     <ul class="checks">
-        <li><strong>Kernel</strong> — boots configuration, container and routes, then dispatches one request end to end.</li>
-        <li><strong>Router</strong> — explicit route table with placeholders, named URLs, 404/405 handling and HEAD support.</li>
-        <li><strong>Container</strong> — constructor injection and request-scoped singletons for Database, Session, Security and View.</li>
-        <li><strong>Request / Response</strong> — immutable HTTP objects; JSON, HTML and redirect factories.</li>
-        <li><strong>View</strong> — plain-PHP templates with layouts, partials and the <code>$e()</code> escaping helper.</li>
-        <li><strong>Database</strong> — PDO wrapper with prepared statements, identifier guards and transactions.</li>
-        <li><strong>Middleware</strong> — <code>StartSession → VerifyCsrfToken → Authenticate</code>, plus security headers on every response.</li>
+        <li><strong>Catalogue</strong> — every capability is a row in <code>permissions</code>, written from <code>config/permissions.php</code>.</li>
+        <li><strong>Matrix</strong> — four roles, explicit grants only: no wildcard, no inheritance, no administrator bypass.</li>
+        <li><strong>Middleware</strong> — <code>permission:users.view</code> and <code>role:dean</code> rules run after <code>auth</code> and fail closed.</li>
+        <li><strong>Scope</strong> — repositories take an <code>App\Services\Scope</code>, so dean and faculty queries are filtered in SQL.</li>
+        <li><strong>Audit</strong> — every refusal is written as <code>authz.denied</code> with the route and required rules.</li>
     </ul>
     <p class="hint">
-        Authentication is wired but has no users yet: <code>/pipeline/guarded</code> answers
-        <code>401</code> JSON for API clients and redirects browsers to <code>/login</code>, which Phase 7 creates.
+        Try <a href="<?= $e($route('admin.users.index')) ?>">/admin/users</a> with different roles: the same page shows
+        everybody for the administrator, one department for a dean or secretary, and only yourself for faculty.
     </p>
 </section>

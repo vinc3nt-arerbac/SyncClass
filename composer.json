@@ -41,6 +41,9 @@
         "lint": "php bin/lint.php",
         "test:security": "php tests/security_primitives_test.php",
         "test:core": "php tests/core_framework_test.php",
-        "test:auth": "php tests/auth_test.php"
+        "test:auth": "php tests/auth_test.php",
+        "test:rbac": "php tests/rbac_test.php",
+        "test:master": "php tests/master_data_test.php",
+        "test:schedule": "php tests/schedule_test.php"
     }
 }
