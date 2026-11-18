@@ -10,71 +10,88 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Router;
 use App\Core\Session;
+use App\Repositories\UserRepository;
+use App\Services\AuthService;
+use App\Services\RememberMeService;
 
 /**
  * Require a signed-in user (AUTH-01, AUTH-08).
  *
- * The gate itself is trivial — is there an authenticated user id in the
- * session? — and that is the point: it must be impossible to forget. Every
- * route that is not explicitly public carries the `auth` alias.
+ * Three things happen here, in this order:
  *
- * Phase 6 does not create the identity: there is no login form until Phase 7.
- * The middleware therefore reads (and checks the type of) the session key that
- * Phase 7's AuthService will write, and exposes the id to controllers through
- * `$request->attribute('auth_user_id')`. Nothing here loads the user row: that
- * is the repository's job in Phase 7, and doing it twice would mean two
- * sources of truth for "who is this".
+ *  1. **Session identity.** If the session holds a user id, it is resolved to a
+ *     real, active account. A deleted or deactivated account cannot keep a
+ *     stale session alive: the id is removed and the visitor is signed out.
+ *  2. **Remember-me.** With no session, a remember-me cookie is validated and
+ *     rotated; a successful rotation establishes the session through the same
+ *     AuthService::loginUser() used by the password form, and the replacement
+ *     cookie is attached to the response.
+ *  3. **Exposure.** The full user row (role and department included) is passed
+ *     to controllers and views as `auth_user` / `auth_user_id`.
  *
- * Two outcomes on failure, matching the client:
- *   - HTML navigation: 302 to the login route, remembering where the user was
- *     going so Phase 7 can send them back after signing in;
- *   - AJAX/API: 401 JSON, because redirecting a fetch() call to an HTML login
- *     page produces a confusing "unexpected token <" error.
+ * Failure is answered by content type: 401 JSON for fetch()/API clients (a
+ * redirect to an HTML page would surface as "unexpected token <" in the
+ * client), and a 302 to the login route for navigation, remembering where the
+ * user was heading.
  */
 final class Authenticate implements MiddlewareInterface
 {
-    /**
-     * Session key holding the authenticated user id. Public so the Phase 7
-     * AuthService and the tests reference the same literal.
-     */
-    public const SESSION_KEY = '_syncclass_auth_id';
-
-    /**
-     * Session key holding the URL to return to after signing in.
-     */
-    public const INTENDED_KEY = '_syncclass_intended_url';
-
     public function __construct(
         private readonly Session $session,
-        private readonly Router $router
+        private readonly Router $router,
+        private readonly UserRepository $users,
+        private readonly AuthService $auth,
+        private readonly RememberMeService $remember
     ) {
     }
 
     public function handle(Request $request, callable $next): Response
     {
-        $id = $this->session->get(self::SESSION_KEY);
+        $userId = $this->auth->userId();
+        $rememberLogin = null;
 
-        if (!is_int($id) && !(is_string($id) && ctype_digit($id))) {
-            if ($request->wantsJson()) {
-                throw HttpException::unauthorized('Your session has ended. Sign in and try again.');
+        if ($userId === null) {
+            $rememberLogin = $this->remember->consume(
+                $request->cookie($this->remember->cookieName()),
+                $request->ip(),
+                $request->userAgent()
+            );
+
+            if ($rememberLogin !== null) {
+                $this->auth->loginUser($rememberLogin->userId());
+                $userId = $rememberLogin->userId();
             }
-
-            $this->session->set(self::INTENDED_KEY, $request->uri());
-
-            return Response::redirect($this->loginUrl(), 302);
         }
 
-        return $next($request->withAttribute('auth_user_id', (int) $id));
+        $user = $userId === null ? null : $this->users->findById($userId);
+
+        if ($user === null || !$this->users->isActive($user)) {
+            $this->session->remove(AuthService::SESSION_KEY);
+
+            return $this->unauthenticated($request);
+        }
+
+        $response = $next($request
+            ->withAttribute('auth_user', $user)
+            ->withAttribute('auth_user_id', (int) $user['id']));
+
+        if ($rememberLogin !== null) {
+            $response = $response->withHeader('Set-Cookie', $rememberLogin->cookie()->toHeader());
+        }
+
+        return $response;
     }
 
-    /**
-     * Prefer the named login route; fall back to the conventional path so this
-     * middleware is safe to enable before Phase 7 registers the route.
-     */
-    private function loginUrl(): string
+    private function unauthenticated(Request $request): Response
     {
-        return $this->router->hasNamed('login')
-            ? $this->router->url('login')
-            : $this->router->to('/login');
+        if ($request->wantsJson()) {
+            throw HttpException::unauthorized('Your session has ended. Sign in and try again.');
+        }
+
+        // Preserved for the login controller, which redirects back here after
+        // a successful sign-in (open-redirect safe: the value is a local path).
+        $this->session->set(AuthService::INTENDED_KEY, $request->uri());
+
+        return Response::redirect($this->router->url('login'), 302);
     }
 }

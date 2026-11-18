@@ -37,8 +37,11 @@ final class HomeController extends Controller
             ? round((microtime(true) - SYNC_CLASS_BOOT_AT) * 1000, 2)
             : null;
 
+        $user = $request->attribute('auth_user');
+
         return $this->view('home/index', [
-            'title' => 'Pipeline overview',
+            'title' => 'Scheduler overview',
+            'user' => is_array($user) ? $user : null,
             'base_url' => (string) $this->config->get('app.url', ''),
             'environment' => (string) $this->config->get('app.env', 'local'),
             'debug' => (bool) $this->config->get('app.debug', false),

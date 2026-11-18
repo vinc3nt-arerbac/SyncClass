@@ -61,6 +61,16 @@ return [
     ],
 
     // -----------------------------------------------------------------------
+    // Remember-me cookie (AUTH-05). The token rows live in remember_tokens and
+    // hold only a selector plus a SHA-256 of the validator; this block only
+    // decides how the browser stores its half.
+    // -----------------------------------------------------------------------
+    'remember' => [
+        'cookie_name' => 'syncclass_remember',
+        'cookie_path' => '/',
+    ],
+
+    // -----------------------------------------------------------------------
     // CSRF (AUTH-09). One token per session, rotated on login, logout and
     // privilege change. `lifetime_minutes` bounds how long an opened form can
     // sit before its token is refused; 0 disables the age check.

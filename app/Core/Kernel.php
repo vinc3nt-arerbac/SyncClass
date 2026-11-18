@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core;
 
 use App\Middleware\Authenticate;
+use App\Middleware\Guest;
 use App\Middleware\StartSession;
 use App\Middleware\VerifyCsrfToken;
 use Closure;
@@ -103,6 +104,12 @@ final class Kernel
         // it the current request rather than a cached one.
         $this->container->instance(Request::class, $request);
 
+        // The View singleton outlives a single request in long-running workers
+        // and in the test kernel: never let the previous user leak into this
+        // render. dispatch() sets the real value once the auth middleware has
+        // resolved it.
+        $this->container->get(View::class)->share('auth_user', null);
+
         try {
             $match = $this->router->match($request);
             $route = $match->route();
@@ -166,6 +173,9 @@ final class Kernel
     {
         $handler = $match->route()->handler();
         $parameters = array_values($match->parameters());
+
+        // Layouts render the signed-in user; null for public pages.
+        $this->container->get(View::class)->share('auth_user', $request->attribute('auth_user'));
 
         if ($handler instanceof Closure) {
             $result = $handler($request, ...$parameters);
@@ -320,6 +330,7 @@ final class Kernel
             'session' => StartSession::class,
             'csrf' => VerifyCsrfToken::class,
             'auth' => Authenticate::class,
+            'guest' => Guest::class,
         ];
     }
 

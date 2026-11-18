@@ -17,6 +17,7 @@
  */
 
 $title = $title ?? 'SyncClass';
+$authUser = $auth_user ?? null;
 ?>
 <!doctype html>
 <html lang="en">
@@ -37,6 +38,19 @@ $title = $title ?? 'SyncClass';
     <nav class="topnav" aria-label="Primary">
         <a href="<?= $e($route('home')) ?>">Overview</a>
         <a href="<?= $e($route('health')) ?>">Health</a>
+
+        <?php if (is_array($authUser)): ?>
+            <span class="user-chip">
+                <span class="user-name"><?= $e($authUser['first_name'] . ' ' . $authUser['last_name']) ?></span>
+                <span class="user-role"><?= $e($authUser['role_name'] ?? '') ?></span>
+            </span>
+            <form class="logout-form" method="post" action="<?= $e($route('logout')) ?>">
+                <?= $csrf_field() ?>
+                <button type="submit" class="link-button">Sign out</button>
+            </form>
+        <?php else: ?>
+            <a href="<?= $e($route('login')) ?>">Sign in</a>
+        <?php endif; ?>
     </nav>
 </header>
 

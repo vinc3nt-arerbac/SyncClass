@@ -17,8 +17,14 @@
 $middlewareChain = $middleware_chain;
 ?>
 <section class="hero">
-    <p class="eyebrow">Phase 6 · Core MVC framework</p>
-    <h1>Requests now travel through a real pipeline.</h1>
+    <p class="eyebrow">Phase 7 · Authentication</p>
+    <h1>
+        <?php if ($user !== null): ?>
+            Welcome back, <?= $e($user['first_name']) ?>.
+        <?php else: ?>
+            Requests now travel through a real pipeline.
+        <?php endif; ?>
+    </h1>
     <p class="lede">
         This page was matched by the router, authorised by the middleware chain, assembled by
         <code>App\Controllers\HomeController</code> and rendered by <code>App\Core\View</code>.
@@ -42,6 +48,19 @@ $middlewareChain = $middleware_chain;
             <span class="tag"><?= $e($server_software) ?></span>
         </header>
         <dl class="facts">
+            <?php if ($user !== null): ?>
+                <div>
+                    <dt>Signed in as</dt>
+                    <dd>
+                        <?= $e($user['first_name'] . ' ' . $user['last_name']) ?>
+                        · <code><?= $e($user['role_name']) ?></code>
+                    </dd>
+                </div>
+                <div>
+                    <dt>Email</dt>
+                    <dd><?= $e($user['email']) ?></dd>
+                </div>
+            <?php endif; ?>
             <div>
                 <dt>Matched route</dt>
                 <dd><code><?= $e($route_name) ?></code></dd>

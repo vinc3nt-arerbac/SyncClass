@@ -169,25 +169,30 @@ Selector/validator scheme, matching `remember_tokens`:
 
 The validator is never stored in plaintext; the selector is not secret (it is only a lookup key).
 
-### 6.6 Login flow (Phase 7 preview)
+### 6.6 Login flow (implemented in Phase 7)
 
 ```
-GET  /login                  → form + CSRF token
-POST /login                  → CSRF verify → throttle check → validate email/password
-                               → UserRepository::findByEmail
-                               → inactive? generic failure (AUTH-08)
-                               → verifyPassword (or verifyDummyPassword)
-                               → fail: write login_attempts, audit, regenerate ID, generic 422
-                               → success: transaction { reset counters, last_login_at }
-                                          session_regenerate_id(true)
-                                          rotate CSRF token
-                                          store user id + role + department in session
-                                          optional remember token
-                               → 302 to intended URL (same-origin only) or /dashboard
-POST /logout (CSRF)          → revoke remember tokens → Session::destroy() → 302 /login
+GET  /login                  → form + CSRF token (`guest`: signed-in visitors go to /)
+POST /login                  → global CSRF verify → validate email/password
+                               → AuthService::attempt()
+                                 1 throttle: >= max_attempts failures / window for email+IP → 429 + Retry-After
+                                 2 UserRepository::findByEmail; on miss verifyDummyPassword() (timing)
+                                 3 inactive account → generic 422; locked account → 429
+                                 4 verifyPassword(); failure writes login_attempts + users counter
+                                   and locks the account at the threshold
+                                 5 success: rehash if needed, reset counters, stamp last_login_at,
+                                   session_regenerate_id(true), rotate the CSRF token, store the
+                                   user id in the session, optionally issue a remember token
+                               → 303 to the intended path, or /
+POST /logout (CSRF)          → revoke the presented remember token → audit → Session::destroy()
+                               → expire the cookie → 303 /login
 ```
 
-Open-redirect protection: the `intended` URL is accepted only if it is a relative path starting with a single `/` (no `//host`, no scheme).
+**Session contents:** only the authenticated user id (`_syncclass_auth_id`). The role and department are read from the database on every request by `Authenticate`, so a role change or a deactivation takes effect immediately instead of waiting for the session to expire.
+
+**Open-redirect protection:** the `intended` value is written by the auth middleware from the requested URI, is accepted only as a local path (a leading `//` is discarded), and is prefixed with the application base path before redirecting.
+
+**Remember me:** cookie `syncclass_remember` = `selector:validator`, HttpOnly, SameSite=Lax, Secure over HTTPS, 30 days. The database stores the selector plus SHA-256(validator) in `remember_tokens`; consuming a cookie deletes the row and issues a new pair, and a selector/validator mismatch invalidates every remembered browser for that user.
 
 ---
 

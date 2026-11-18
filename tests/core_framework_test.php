@@ -29,9 +29,9 @@ use App\Core\Router;
 use App\Core\Security;
 use App\Core\Session;
 use App\Core\View;
-use App\Middleware\Authenticate;
 use App\Middleware\StartSession;
 use App\Middleware\VerifyCsrfToken;
+use App\Services\AuthService;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -448,35 +448,42 @@ check('CSRF middleware accepts the form token', $csrfField instanceof Response);
 $csrfSafe = run_pipeline($middlewareContainer, new Request('GET', '/pipeline/echo'), [VerifyCsrfToken::class]);
 check('CSRF middleware lets safe methods through', $csrfSafe instanceof Response);
 
-$session->remove(Authenticate::SESSION_KEY);
-
-$authApi = run_pipeline($middlewareContainer, new Request('GET', '/pipeline/guarded', headers: ['accept' => 'application/json']), [Authenticate::class]);
-check('Authenticate returns 401 JSON to an API client', $authApi instanceof HttpException && $authApi->status() === 401);
-
-$authHtml = run_pipeline($middlewareContainer, new Request('GET', '/pipeline/guarded', headers: ['accept' => 'text/html']), [Authenticate::class]);
-$authLocation = $authHtml instanceof Response ? (string) $authHtml->header('Location') : '';
-check('Authenticate redirects a browser to the login route', $authHtml instanceof Response
-    && $authHtml->status() === 302
-    && $authLocation === '/SyncClass/login', $authLocation);
-check('Authenticate remembers the intended url', $session->get(Authenticate::INTENDED_KEY) === '/pipeline/guarded');
-
-$session->set(Authenticate::SESSION_KEY, 7);
-$authPassed = run_pipeline(
-    $middlewareContainer,
-    new Request('GET', '/pipeline/guarded'),
-    [Authenticate::class],
-    static fn (Request $request): Response => Response::json(['id' => $request->attribute('auth_user_id')])
-);
-check('Authenticate passes the user id to the destination', $authPassed instanceof Response && $authPassed->body() === '{"id":7}');
+// Authenticate is exercised end to end in tests/auth_test.php, where a real
+// user row exists: 401 JSON for API clients, 302 to /login for browsers, the
+// intended-URL round trip, and remember-me restoration. It cannot be tested
+// here without a users table, and a mocked repository would prove nothing.
 
 // ---------------------------------------------------------------------------
 // Kernel end to end (real routes, real views)
 // ---------------------------------------------------------------------------
-$kernel = Kernel::boot($config);
+// Phase 7 made the shell private, so this kernel runs on an in-memory SQLite
+// database with one real user row (roles + users are all Authenticate needs).
+$kernelConfig = $config;
+$kernelConfig['database'] = ['driver' => 'sqlite', 'database' => ':memory:'];
+$kernelConfig['security']['password']['options']['cost'] = 4;
+$kernelConfig['app']['session']['name'] = 'syncclass_core_test';
+
+$kernel = Kernel::boot($kernelConfig);
 $kernelView = $kernel->container()->get(View::class);
 
+require __DIR__ . '/support/auth_schema.php';
+$kernelDatabase = $kernel->container()->get(Database::class);
+auth_schema($kernelDatabase);
+$kernelUserId = auth_create_user($kernelDatabase, [
+    'email' => 'core.tester@sac.edu.ph',
+    'first_name' => 'Core',
+    'last_name' => 'Tester',
+]);
+
+$anonymous = $kernel->handle(new Request('GET', '/'));
+check('an anonymous request is redirected to the login route', $anonymous->status() === 302
+    && $anonymous->header('Location') === '/SyncClass/login', (string) $anonymous->header('Location'));
+
+$kernel->handle(new Request('GET', '/login')); // starts the session
+$kernel->container()->get(Session::class)->set(AuthService::SESSION_KEY, $kernelUserId);
+
 $home = $kernel->handle(new Request('GET', '/'));
-check('GET / is served by the routed home page', $home->status() === 200 && str_contains($home->body(), 'Requests now travel through a real pipeline'));
+check('GET / is served by the routed home page', $home->status() === 200 && str_contains($home->body(), 'Welcome back, Core'));
 check('home page renders the route table', str_contains($home->body(), 'pipeline.echo') && str_contains($home->body(), '/health'));
 check('rendered pages carry security headers', $home->header('X-Content-Type-Options') === 'nosniff'
     && str_contains((string) $home->header('Content-Security-Policy'), 'nonce-')
@@ -527,17 +534,16 @@ $echoInvalid = $kernel->handle(new Request('POST', '/pipeline/echo', body: ['mes
 check('validation failures return 422 with field errors', $echoInvalid->status() === 422
     && isset(json_decode($echoInvalid->body(), true)['error']['errors']['message']));
 
-// The middleware section above left an authenticated id in the (shared)
-// session; clear it so this assertion sees an anonymous visitor.
-$kernel->container()->get(Session::class)->remove(Authenticate::SESSION_KEY);
+// Drop the authenticated id so this assertion sees an anonymous visitor.
+$kernel->container()->get(Session::class)->remove(AuthService::SESSION_KEY);
 
 $guarded = $kernel->handle(new Request('GET', '/pipeline/guarded', headers: ['accept' => 'application/json']));
 check('the guarded route is protected by the auth middleware', $guarded->status() === 401, $guarded->body());
 
-$kernel->container()->get(Session::class)->set(Authenticate::SESSION_KEY, 42);
+$kernel->container()->get(Session::class)->set(AuthService::SESSION_KEY, $kernelUserId);
 $guardedAllowed = $kernel->handle(new Request('GET', '/pipeline/guarded'));
 check('the guarded route reaches the controller once authenticated', $guardedAllowed->status() === 200
-    && json_decode($guardedAllowed->body(), true)['auth_user_id'] === 42, $guardedAllowed->body());
+    && (int) json_decode($guardedAllowed->body(), true)['auth_user_id'] === $kernelUserId, $guardedAllowed->body());
 
 $escaped = $kernelView->render('errors/http', [
     'title' => 'probe',

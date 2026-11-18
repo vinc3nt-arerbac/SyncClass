@@ -216,7 +216,15 @@ final class Container
             /** @var class-string $dependency */
             $dependency = $type->getName();
 
-            return $this->get($dependency);
+            // Classes that cannot be constructed are not dependencies to
+            // autowire: an optional `?Closure $clock = null` is a seam for
+            // tests, not a service. Fall through to the default/null handling
+            // below instead of failing with "Closure cannot be instantiated".
+            if ($dependency !== \Closure::class && class_exists($dependency)
+                && (new ReflectionClass($dependency))->isInstantiable()
+            ) {
+                return $this->get($dependency);
+            }
         }
 
         if ($parameter->isDefaultValueAvailable()) {
