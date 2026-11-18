@@ -17,7 +17,7 @@ declare(strict_types=1);
  * constants and the return contract (a configuration array) stay the same so
  * the front controllers do not change.
  *
- * @return array{app: array<string, mixed>, database: array<string, mixed>, mail: array<string, mixed>, schedule: array<string, mixed>}
+ * @return array{app: array<string, mixed>, database: array<string, mixed>, mail: array<string, mixed>, schedule: array<string, mixed>, security: array<string, mixed>}
  */
 
 define('BASE_PATH', __DIR__);
@@ -48,6 +48,7 @@ $config = [
     'database' => require BASE_PATH . '/config/database.php',
     'mail' => require BASE_PATH . '/config/mail.php',
     'schedule' => require BASE_PATH . '/config/schedule.php',
+    'security' => require BASE_PATH . '/config/security.php',
 ];
 
 // Local overrides are merged last so a deployment never edits tracked files.
@@ -104,10 +105,15 @@ set_exception_handler(static function (Throwable $exception) use ($debug): void 
         echo $exception->getMessage() . "\n\n";
         echo $exception->getFile() . ':' . $exception->getLine() . "\n\n";
         echo $exception->getTraceAsString() . "\n";
-        return;
+
+        exit(1);
     }
 
     echo "Something went wrong. Please contact the administrator with reference {$requestId}.\n";
+
+    // Non-zero exit so a CLI run (tests, cron) never looks successful after a
+    // fatal error; HTTP clients already received the 500 status above.
+    exit(1);
 });
 
 return $config;

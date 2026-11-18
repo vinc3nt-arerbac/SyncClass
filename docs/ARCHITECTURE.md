@@ -55,7 +55,8 @@ Consistent with the project brief; `public/` is the web root.
 SyncClass/
 ├── app/
 │   ├── Core/            Kernel, Router, Request, Response, Controller,
-│   │                    View, Container, Config, Database, Model base
+│   │                    View, Container, Config, Database, Security,
+│   │                    Session, Model base
 │   ├── Controllers/     Auth, Dashboard, Schedule, Calendar, Api/*, Reports, Admin/*
 │   ├── Models/          Thin entity objects (User, Schedule, Room, …)
 │   ├── Repositories/    UserRepository, ScheduleRepository, RoomRepository, …
@@ -138,6 +139,8 @@ POST /schedules            (form, CSRF token)
 | `Model` | Minimal data holder with `fill()`, `toArray()`, attribute casting. No active-record magic, no lazy relation loading. |
 | `Config` | Dot-notation access to `config/*.php`; never reads `$_ENV` in business code. |
 | `Logger` | PSR-3-style levels to `storage/logs/app-YYYY-MM-DD.log`; separate `audit` channel. |
+| `Security` | Password hashing/verification, token generation, CSRF, output escaping, JSON embedding and response hardening headers. See `docs/SECURITY.md`. |
+| `Session` | Hardened session lifecycle: cookie policy, strict mode, idle + absolute timeouts, ID regeneration, server-side storage outside the web root. |
 
 **Explicitly rejected:** ORM/active record, template engine, annotation routing, event bus, service locator calls from views.
 
@@ -303,6 +306,8 @@ Exports are generated to `storage/exports/` with a signed, expiring filename and
 | Auditing | Auth events, authorisation failures and every schedule mutation with actor, IP, before/after diff. |
 | Headers | `X-Content-Type-Options`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, HSTS when HTTPS. |
 
+**Implementation:** Phase 5 delivers the enforcement points as `App\Core\Security`, `App\Core\Session`, `App\Helpers\Validator` and `config/security.php`; the full control catalogue, threat model, API reference and verification procedure live in `docs/SECURITY.md`. Phase 6 wires them into the request: the Kernel sends `Security::securityHeaders()` on every response and marks them `no-store`; `StartSession` runs globally; `VerifyCsrfToken` guards every non-safe method (419 on failure); `Authenticate` guards `auth:` routes (401 JSON or a 302 to the login route).
+
 **Threat-model highlights:** privilege escalation by ID enumeration (mitigated by scope-filtered repository fetch returning 404, not 403, for out-of-scope IDs); conflict bypass via API (all writes share `ScheduleService`); CSV/Excel formula injection (prefix `= + - @` cells).
 
 ---
@@ -314,6 +319,7 @@ config/app.php        name, base_url, timezone, env, debug, session, upload limi
 config/database.php   host, port, database (anth04_SyncClass), user, pass, charset
 config/mail.php       SMTP host/port/user/pass/from, enabled flag
 config/schedule.php   allowed hours, break periods, default max load, hard/soft rules
+config/security.php   password algorithm/policy, CSRF lifetime, throttle thresholds, response headers
 ```
 
 Selection order: `config/local.php` (git-ignored) → environment variables → defaults. `debug=true` shows a styled error page; `debug=false` logs and shows a generic message with a request ID.
