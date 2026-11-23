@@ -43,11 +43,15 @@ use App\Controllers\MasterData\SemesterController;
 use App\Controllers\MasterData\SubjectController;
 use App\Controllers\PipelineController;
 use App\Controllers\Scheduling\ScheduleController;
+use App\Controllers\Generator\GeneratorController;
 use App\Controllers\UserDirectoryController;
 use App\Core\Container;
 use App\Core\Router;
 
 return static function (Router $router, Container $container): void {
+    // Web API: front-controller dispatches api.php before web.php.
+    // (api.php registers REST endpoints; web.php declares page routes.)
+};
     // -----------------------------------------------------------------------
     // Public: authentication (AUTH-01, AUTH-04)
     // -----------------------------------------------------------------------
@@ -245,4 +249,18 @@ return static function (Router $router, Container $container): void {
         ->name('calendar.month');
     $router->get('/api/calendar/events', [CalendarController::class, 'events'], ['auth', 'permission:schedules.view'], 'Calendar JSON feed')
         ->name('calendar.events');
+
+    // -----------------------------------------------------------------------
+    // Phase 13: Timetable generator (GEN-01..06).
+    // -----------------------------------------------------------------------
+    $router->get('/generator', [GeneratorController::class, 'plan'], ['auth', 'permission:generator.run'], 'Run timetable generator')
+        ->name('generator.plan');
+    $router->post('/generator/preview', [GeneratorController::class, 'preview'], ['auth', 'permission:generator.run'], 'Generator draft')
+        ->name('generator.preview');
+    $router->post('/generator/commit', [GeneratorController::class, 'commit'], ['auth', 'permission:generator.approve'], 'Commit generated schedule')
+        ->name('generator.commit');
+
+    // -----------------------------------------------------------------------
+    // End of Phase 12–13 routes.
+    // -----------------------------------------------------------------------
 };

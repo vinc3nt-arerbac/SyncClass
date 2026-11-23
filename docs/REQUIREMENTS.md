@@ -362,6 +362,54 @@ Phase 1 is complete when a reviewer can confirm:
 | 13 Timetable Generator | GEN-01…06 |
 | 14 Collaboration & Notifications | COL-01…05, NTF-01…04 |
 | 15 Reports | RPT-01…07 |
+### 13.1 Phase 13 — Timetable generator (GEN-01…06)
+
+| ID | Requirement | Status |
+|---|---|---|
+| GEN-01 | Deterministic constraint solving, not generative AI | **done** |
+| GEN-02 | Inputs: term, department(s), sections, subjects, faculty, rooms, availability, policy | **done** |
+| GEN-03 | Output: conflict-free candidate entries, or unsatisfiable explanation | **done** |
+| GEN-04 | Previewable, transactional commit | **done** |
+| GEN-05 | Objective: satisfy requirements → min room waste → load balance → min idle gaps | **done** |
+| GEN-06 | Utilization and workload metrics | **done** |
+
+**Files created** (Phase 13):
+
+- `app/Services/Generator/TimetableGenerator.php` — the deterministic search
+  driver; expands requirements, maintains the bounded candidate space,
+  backtracks with forward checking and conflict-directed backjumping, and
+  commits the best draft.
+- `app/Services/Generator/DraftSession.php` — the in-session draft timer and
+  node counter (ADR-06).
+- `app/Services/Generator/ConstraintEvaluator.php` — wraps `ConflictService`
+  so the generator and the form/calendar share the same feasibility check.
+- `app/Services/Generator/RoomMatcher.php`, `FacultyMatcher.php` — candidates
+  filtered by subject preference, capacity, department and load.
+- `app/Controllers/Generator/GeneratorController.php` — GET `/generator`,
+  POST `/generator/preview`, POST `/generator/commit`.
+- `app/Views/generator/plan.php`, `result.php`, `_partial.php` — the planning
+  form, the run result with metrics and the commit action.
+- `public/assets/js/generator.js` — runs the generator, renders the draft
+  timetable, wires commit.
+- `routes/api.php` — `POST /generator/preview`, `POST /generator/commit`.
+- `database/schema/SyncClass.sql` — `GEN-02` demand input is already the
+  `section_subjects` table (subjects × sections); the generator reads it.
+
+**Testing procedure** (to be run on the local XAMPP installation):
+
+```bash
+cd /workspace/chats/e3c32778e44f5cc31faf9e26
+php tests/generator_test.php
+```
+
+Generates a draft against the seeded term, verifies zero hard conflicts,
+verifies the draft commits transactionally as `draft` rows, and re-uses the
+existing `ConflictService::check()` coverage to confirm the generator has
+not introduced a new rule. The demo data (5 departments, 20 faculty, 50
+subjects, 30 rooms, 30 schedule records) gives the generator enough volume
+to exercise the backtracking and the objective scorer.
+
+**Next phase** — Phase 14: Collaboration & Notifications (NTF-01…04, COL-01…05) and Phase 15: Reports + exports (RPT-01…07).
 | 16 Dashboard Analytics | DASH-01…03 |
 | 17 UI Polish | NFR-08, NFR-09 |
 | 18 Testing | §11 UAT-1…6, CNF-11 (verification) |

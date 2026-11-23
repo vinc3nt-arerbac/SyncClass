@@ -488,6 +488,7 @@ XAMPP: copy to `D:\xampp8.2\htdocs\SyncClass`, import `database/schema/SyncClass
 | 10 | Scheduling and search (form, recurring builder, SRCH-01…03) | SCH-01…07 pass |
 | 11 | Conflict engine + alternatives | UAT-1 passes; CNF-11 benchmark met |
 | 12 | Calendar + API (CAL-01…06) | UAT-6 passes; month view under 1.5 s |
+| 12 | Calendar + API (CAL-01…06) | UAT-6 passes; month view under 1.5 s |
 | 13 | Generator (GEN-01…06) | UAT-3 passes; drafts commit transactionally |
 | 14 | Collaboration + notifications | NTF-01…04, COL-01…05 pass |
 | 15 | Reports + exports (RPT-01…07) | UAT-5 passes; PDF/Excel open correctly |
