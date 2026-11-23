@@ -217,6 +217,12 @@ return static function (Router $router, Container $container): void {
     // the requested target, so this gate only decides who may knock.
     $router->post('/schedules/{id}/status', [ScheduleController::class, 'status'], ['auth', 'permission:schedules.update,schedules.approve,schedules.delete'], 'Change schedule status')
         ->name('schedules.status');
+    // Phase 11: dry-run conflict preview. Any of the three scheduling
+    // permissions may call it (secretary builds, dean approves, admin owns),
+    // but nothing writes: ConflictService::check() returns errors[] and
+    // alternatives[] for the form's "what-if" widget.
+    $router->post('/schedules/{id}/conflict-suggestions', [ScheduleController::class, 'conflictSuggestions'], ['auth', 'permission:schedules.update,schedules.approve,schedules.delete'], 'Conflict and room alternatives')
+        ->name('schedules.conflict_suggestions');
 
     // -----------------------------------------------------------------------
     // Phase 6 probes — see App\Controllers\PipelineController.
@@ -229,4 +235,14 @@ return static function (Router $router, Container $container): void {
 
     $router->get('/pipeline/guarded', [PipelineController::class, 'guarded'], ['auth'], 'Authentication probe')
         ->name('pipeline.guarded');
+
+    // -----------------------------------------------------------------------
+    // Phase 12: Calendar (CAL-01..CAL-06).
+    // -----------------------------------------------------------------------
+    $router->get('/calendar', [CalendarController::class, 'index'], ['auth', 'permission:schedules.view'], 'Calendar')
+        ->name('calendar.index');
+    $router->get('/calendar/{year}/{month}', [CalendarController::class, 'index'], ['auth', 'permission:schedules.view'], 'Calendar month')
+        ->name('calendar.month');
+    $router->get('/api/calendar/events', [CalendarController::class, 'events'], ['auth', 'permission:schedules.view'], 'Calendar JSON feed')
+        ->name('calendar.events');
 };

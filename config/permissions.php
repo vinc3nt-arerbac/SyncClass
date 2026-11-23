@@ -109,9 +109,42 @@ $modules = [
             'schedules.update' => 'Edit class schedules',
             'schedules.delete' => 'Cancel class schedules',
             'schedules.approve' => 'Approve or reject schedules',
+            'schedules.conflict_suggestions' => 'Get conflict and room alternatives',
+        ],
+    ],
+    'calendar' => [
+        'label' => 'Calendar',
+        'permissions' => [
+            'calendar.view' => 'View the calendar (month, week, day, timetable)',
+            'calendar.export' => 'Export calendar events',
         ],
     ],
     'requests' => [
+        'label' => 'Change requests',
+        'permissions' => [
+            'requests.view' => 'View schedule change requests',
+            'requests.create' => 'File a schedule change request',
+            'requests.update' => 'Edit or cancel own change requests',
+            'requests.approve' => 'Approve or reject change requests',
+        ],
+    ],
+    'conflicts' => [
+        'label' => 'Conflict records',
+        'permissions' => [
+            'conflicts.view' => 'View detected schedule conflicts',
+        ],
+    ],
+    'generator' => [
+        'label' => 'Timetable generator',
+        'permissions' => [
+            'generator.run' => 'Run the timetable generator',
+            'generator.approve' => 'Accept a generated draft timetable',
+        ],
+    ],
+    'reports' => [
+        'label' => 'Reports & exports',
+        'permissions' => [
+
         'label' => 'Change requests',
         'permissions' => [
             'requests.view' => 'View schedule change requests',

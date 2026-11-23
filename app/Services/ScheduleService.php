@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Core\Config;
 use App\Core\HttpException;
+use App\Services\ConflictService;
 use App\Repositories\FacultyRepository;
 use App\Repositories\RoomRepository;
 use App\Repositories\ScheduleRepository;
@@ -36,10 +37,11 @@ use DateTimeImmutable;
  *      editing an approved entry sends it back to `pending` for re-approval.
  *
  * Phase 11 adds the conflict engine to `create()`/`update()` before the insert.
- * The seam is deliberate: the conflict service will ask
- * ScheduleRepository::activeInSemester() for the term's other meetings, exactly
- * as the indexes in migration 006 anticipate, and throw a 409/422 with the
- * specific clashes plus alternatives.
+ * `ConflictService` owns every overlap rule (room, faculty, section, subject,
+ * department, one-off date) and the alternative suggestions. The service asks
+ * `ScheduleRepository::activeInSemester()` for the term's other meetings, throws
+ * a 422 with `conflicts[]` on a hit, and hands the validated facts to the
+ * repository.
  */
 final class ScheduleService
 {
@@ -68,7 +70,8 @@ final class ScheduleService
         private readonly RoomRepository $rooms,
         private readonly TermRepository $terms,
         private readonly AuthorizationService $authorization,
-        private readonly Config $config
+        private readonly Config $config,
+        private readonly ConflictService $conflict
     ) {
     }
 
@@ -85,6 +88,21 @@ final class ScheduleService
         $status = in_array((string) ($data['status'] ?? 'draft'), ['draft', 'pending'], true)
             ? (string) $data['status']
             : 'draft';
+
+        // Phase 11: evaluate every overlap rule *before* a row is written, so
+        // a half-open clash is a 409 with the specific conflicts and the
+        // alternative rooms the caller can offer the teacher. The repository
+        // supplies the term's active meetings (migration 006 covers this);
+        // nothing else has to change in the engine.
+        $existing = $this->schedules->activeInSemester((int) $resolved['semester']['id']);
+        $result = $this->conflict->check($resolved, $existing);
+
+        if ($result['status'] === 'conflict') {
+            throw HttpException::unprocessable(
+                ['conflicts' => $result['errors']],
+                'This meeting clashes with an existing one'
+            );
+        }
 
         $ids = [];
 
@@ -137,6 +155,21 @@ final class ScheduleService
         }
 
         $resolved = $this->resolve($scope, $data);
+
+        // Phase 11: re-check the term against the *new* facts. An edit can
+        // create a clash with the rows it is now moving past (the draft it is
+        // replacing, the room it is now sharing) even though the old row was
+        // clean, so the check runs with the resolved facts and the active
+        // rows in the term, same as create().
+        $existing = $this->schedules->activeInSemester((int) $resolved['semester']['id']);
+        $result = $this->conflict->check($resolved, $existing);
+
+        if ($result['status'] === 'conflict') {
+            throw HttpException::unprocessable(
+                ['conflicts' => $result['errors']],
+                'This meeting clashes with an existing one'
+            );
+        }
 
         $this->schedules->update((int) $schedule['id'], [
             'semester_id' => $resolved['semester']['id'],

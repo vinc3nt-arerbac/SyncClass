@@ -18,6 +18,7 @@ use App\Repositories\SectionRepository;
 use App\Repositories\SubjectRepository;
 use App\Repositories\TermRepository;
 use App\Services\AuthorizationService;
+use App\Services\ConflictService;
 use App\Services\ScheduleService;
 use App\Services\Scope;
 
@@ -50,7 +51,8 @@ final class ScheduleController extends Controller
         private readonly TermRepository $terms,
         private readonly ScheduleService $service,
         private readonly AuthorizationService $authorization,
-        private readonly AuditRepository $audit
+        private readonly AuditRepository $audit,
+        private readonly ConflictService $conflict
     ) {
         parent::__construct($request, $view, $router, $config);
     }
@@ -94,6 +96,45 @@ final class ScheduleController extends Controller
     public function create(Request $request): Response
     {
         return $this->form($request, null);
+    }
+
+    /**
+     * Preview conflicts and alternative rooms for a candidate entry.
+     *
+     * Phase 11: `ConflictService::check()` never writes, so this endpoint is
+     * safe to call from the form's "what if" widget. On a hard conflict it
+     * returns 409 with `errors[]` and `alternatives[]` so the view can offer
+     * the teacher a concrete fix without persisting anything.
+     *
+     * @param array<string, mixed> $data Validated form input.
+     */
+    public function conflictSuggestions(Request $request, string $id): Response
+    {
+        $schedule = $this->load($request, (int) $id);
+        $scope = $this->scope($request);
+        $actor = $this->actor($request);
+        $data = $this->validateSchedule($request);
+
+        // The conflict engine expects the *resolved* facts, not the form
+        // payload: one row per selected weekday, the department derived from
+        // the section, the recurrence normalised. The service already owns
+        // that resolver for the same purpose inside create()/update().
+        $resolved = $this->service->resolve($scope, $data);
+
+        // All reads are scoped by the term, and every row here is active: the
+        // candidate is compared against the term's real timetable.
+        $existing = $this->schedules->activeInSemester((int) $resolved['semester']['id']);
+        $result = $this->conflict->check($resolved, $existing);
+
+        if ($result['status'] === 'ok') {
+            return $this->json(['ok' => true]);
+        }
+
+        return $this->json([
+            'ok' => false,
+            'errors' => $result['errors'],
+            'alternatives' => $this->conflict->suggestAlternatives($resolved, $existing)['alternatives'],
+        ], 409);
     }
 
     public function store(Request $request): Response

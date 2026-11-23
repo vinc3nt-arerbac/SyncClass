@@ -245,9 +245,110 @@ ConflictService::check(ScheduleCandidate $c, ConflictUniverse $u): ConflictRepor
 
 ---
 
-## 10. Calendar and API contract (overview)
+## 10. Calendar and API contract (Phase 12)
 
-Detail belongs in `docs/API.md` (Phase 12); the architectural contract is:
+### Calendar views (CAL-01)
+
+- **Month** (`?view=month`, the default): a 7-column grid whose cells carry
+  department-colour dots. The month header pivots ±1 month; the date range is
+  the server's scope, never the client's storage.
+- **Week** (`?view=week`): a horizontal time rail (Monday→Sunday) rendered as
+  30-minute row cells. The same drag layer that drives the grid paints the
+  week and the day.
+- **Day** (`?view=day`): a single 24-hour rail, 30-minute slots.
+- **Timetable** (`?view=timetable`): rows are rooms, columns are 30-minute
+  slots. The range feed returns all of the term's entries scoped by role and
+  department (CAL-04), so the grid paints without a second query.
+
+The page (`/calendar`) serves all four pivots from one controller so the
+week/day/timetable can render from the same data shape. The timetableView
+owns the drag targets; the month cells carry the same `data-date`/`
+data-entry-count` shape the drag stub consumes, so a month cell can be a
+drop target without any re-derivation.
+
+### API contract
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/calendar/events?start=&end=&semester_id=&department_id=&filters[]` | GET | FullCalendar range feed, permission-scoped, colour by department |
+
+**Query parameters** (all optional, server defaults to the actor's term):
+
+- `start` / `end` — ISO-8601 date-time in the configured timezone (app serves
+  UTC). The HTTP layer converts them before the controller formats the
+  envelope; the controller only ever sees clean strings.
+- `semester_id` — optional; the repository's `currentSemester()` gate falls
+  back to the actor's department when absent.
+- `department_id` — optional department filter; only rows with `department_id`
+  matching the scope are returned.
+- `page` / `per_page` — pagination; `default 25`, `max 100` in the controller.
+
+**Response** — `{ ok: true, data: { events, total } }` where each event is:
+
+```json
+{
+  "id": 1234,
+  "title": "CSC 101 · CS101A",
+  "start": "2026-08-24T07:00:00Z",
+  "end": "2026-08-24T08:30:00Z",
+  "allDay": false,
+  "section_code": "CS101A",
+  "subject_code": "CSC 101",
+  "teacher": "Alan Cruz",
+  "room": "A-102",
+  "department_color": "#8c1d40",
+  "status": "published",
+  "notes": "Bring projector."
+}
+```
+
+**Events are colour-coded by department** — the repository's `activeInSemester()`
+JOIN already returns `department_color`; the controller just forwards it as
+`department_color`. The calendar's `eventRender` hook paints the tile with
+that hex, so the department palette is a server concern, not a client one.
+
+**Security** — every calendar endpoint requires `auth` + `permission:c_calendar.view`,
+and the repository filters rows by scope before the payload leaves the server:
+
+- `administrator` → every row in the term,
+- `dean` / `secretary` → rows of their own department,
+- `faculty` → only rows they teach.
+
+**CAL-03 drag-and-drop** — the month/week/day pivots are FullCalendar's
+`eventDrop` / `eventResize`; the drag stub validates through `PATCH
+/api/schedules/{id}` (same path as the form). The response must be one of:
+
+- `200 { ok: true, ... }` — move/resize committed;
+- `409 { ok: false, errors: [...], conflicts: [..], alternatives: [...] }` —
+  the engine rejected the placement;
+- `422 { ok: false, errors: [...] }` — validation failed (calendar plays by
+  the same rules as the form, including the conflict-phase check);
+- `429` — throttle (NMF-02).
+
+On `409` the client must revert the tile to its old slot and show the
+`alternatives` the conflict engine computed (roommate-first suggestion).
+
+**CAL-05 range scoping** — the API never returns the whole table. The
+repository's `calendarFeed()` accepts `start`/`end`, filters the term's rows
+in one JOIN scan, and hands the frontend only the visible window. Payload is
+bounded by the range + `per_page`, never by the table size.
+
+**CAL-06** — clicking an event navigates to the schedule's detail drawer
+(`/schedules/{id}`), which renders notes, comments, change requests and an
+edit action if permitted. The calendar does not embed the drawer.
+
+The rest of the API (`/api/schedules`, `/api/schedules/{id}`, conflicts,
+generator, dashboard, search, notifications) is documented in the Phase 11
+and later phase modules — it is untouched by this phase.
+
+**Conventions:** JSON envelope `{ ok, data }` / `{ ok: false, errors, conflicts,
+alternatives }`; all mutating endpoints require `X-CSRF-Token`; pagination
+`?page=&per_page=`; errors carry machine-readable `code` plus human
+`message`.
+
+---
+
+## 11. Notification and collaboration architecture
 
 | Endpoint | Method | Purpose |
 |---|---|---|

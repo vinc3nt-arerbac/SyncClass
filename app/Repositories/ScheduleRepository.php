@@ -39,12 +39,12 @@ final class ScheduleRepository extends MasterDataRepository
                s.room_id, s.day_of_week, s.start_time, s.end_time, s.meeting_date, s.recurrence,
                s.status, s.notes, s.created_by, s.updated_by, s.approved_by, s.approved_at,
                s.published_at, s.cancelled_at, s.cancellation_reason, s.created_at, s.updated_at,
-               sub.code AS subject_code, sub.title AS subject_title, sub.units,
+               sub.code AS subject_code, sub.title AS subject_title, sub.units, sub.department_id AS subject_department_id,
                sec.code AS section_code, sec.student_count,
                u.first_name AS faculty_first_name, u.last_name AS faculty_last_name, u.email AS faculty_email,
                r.code AS room_code, r.capacity AS room_capacity, r.room_type,
                b.code AS building_code,
-               d.code AS department_code, d.name AS department_name, d.color_hex,
+               d.code AS department_code, d.name AS department_name, d.color_hex, d.id AS department_id,
                sem.code AS semester_code, sem.name AS semester_name, sem.status AS semester_status
           FROM schedules s
           INNER JOIN subjects sub ON sub.id = s.subject_id
@@ -225,18 +225,234 @@ final class ScheduleRepository extends MasterDataRepository
      *
      * Phase 11 reads this instead of pulling the whole table; the scope is the
      * term because two entries can only conflict inside the same semester.
+     * The joins give the conflict engine the subject's department and code for
+     * the constraint message without a second query.
+     *
+    /**
+     * Every entry that is not cancelled in a term, for the conflict engine.
+     *
+     * Phase 11 reads this instead of pulling the whole table; the scope is the
+     * term because two entries can only conflict inside the same semester.
+     * The joins give the conflict engine the subject's department and code for
+     * the constraint message without a second query.
      *
      * @return array<int, array<string, mixed>>
      */
     public function activeInSemester(int $semesterId): array
     {
         return $this->database->select(
-            'SELECT id, semester_id, department_id, section_id, subject_id, faculty_id, room_id,
-                    day_of_week, start_time, end_time, status, meeting_date
-               FROM schedules
-              WHERE semester_id = :semester_id AND status <> :cancelled
-              ORDER BY day_of_week, start_time',
+            'SELECT s.id, s.semester_id, s.department_id, s.section_id, s.subject_id, s.faculty_id, s.room_id,
+                    s.day_of_week, s.start_time, s.end_time, s.meeting_date, s.recurrence,
+                    s.status, s.notes, s.created_by, s.updated_by, s.approved_by, s.approved_at,
+                    s.published_at, s.cancelled_at, s.cancellation_reason, s.created_at, s.updated_at,
+                    sub.code AS subject_code, sub.title AS subject_title, sub.units, sub.department_id AS subject_department_id,
+                    sec.code AS section_code, sec.student_count,
+                    u.first_name AS faculty_first_name, u.last_name AS faculty_last_name, u.email AS faculty_email,
+                    r.code AS room_code, r.capacity AS room_capacity, r.room_type,
+                    b.code AS building_code,
+                    d.code AS department_code, d.name AS department_name, d.color_hex, d.id AS department_id,
+                    sem.code AS semester_code, sem.name AS semester_name, sem.status AS semester_status
+               FROM schedules s
+               INNER JOIN subjects sub ON sub.id = s.subject_id
+               INNER JOIN sections sec ON sec.id = s.section_id
+               INNER JOIN faculty_profiles f ON f.id = s.faculty_id
+               INNER JOIN users u ON u.id = f.user_id
+               INNER JOIN rooms r ON r.id = s.room_id
+               INNER JOIN buildings b ON b.id = r.building_id
+               INNER JOIN departments d ON d.id = s.department_id
+               INNER JOIN semesters sem ON sem.id = s.semester_id
+              WHERE s.semester_id = :semester_id AND s.status <> :cancelled
+              ORDER BY s.day_of_week, s.start_time',
             ['semester_id' => $semesterId, 'cancelled' => 'cancelled']
+        );
+    }
+
+    /**
+     * Calendar range feed (CAL-05): every entry whose term overlaps the range
+     * and whose scope is the actor's department or self (CAL-04). One scoped
+     * join scan, then PHP filters the rows to the visible window — the payload
+     * stays small and the query is index-friendly on (semester_id, day_of_week).
+     *
+     * Scope rules (reused from the form and the conflict engine):
+     *   administrator  → every calendar entry in the term
+     *   dean or secretary → entries of the actor's department
+     *   faculty          → only entries where that faculty account is the teacher
+     *
+     * @param array<string, mixed> $authUser
+     *
+     * @return array<int, CalendarEventRow>
+     */
+    public function calendarFeed(
+        string $startIso,
+        string $endIso,
+        ?int $semesterId,
+        ?int $departmentId,
+        array $authUser
+    ): array {
+        $semesterId = (int) ($semesterId ?? 0);
+        $actor = $authUser['id'] ?? 0;
+        $roleCode = $authUser['role_code'] ?? '';
+        $department = $authUser['department_id'] ?? null;
+
+        // The term is the boundary that makes the term's entries non-overlapping;
+        // if the caller did not name one, the scope's department is the filter.
+        if ($semesterId === 0) {
+            $semesterId = $this->defaultSemesterId($authUser);
+        }
+
+        // The date range the calendar paints: weekly entries begin on the first
+        // day of the week, one-off entries on their own meeting date.
+        $range = [
+            'start' => new \DateTimeImmutable($startIso),
+            'end' => new \DateTimeImmutable($endIso),
+        ];
+
+        $scope = Scope::forUser($authUser);
+
+        $rows = $this->activeInSemester($semesterId);
+        $rows = array_values(
+            array_filter($rows, static function (array $row): bool use ($scope): bool {
+                if ($scope->isAdministrator()) {
+                    return true;
+                }
+
+                if ($scope->isDepartmental() && $scope->coversDepartment((int) $row['department_id'])) {
+                    return true;
+                }
+
+                if ($scope->isSelfOnly() && $scope->coversUser($row)) {
+                    return true;
+                }
+
+                return false;
+            })
+        );
+
+        $visible = [];
+        $termBox = $this->termBox($semesterId);
+        $termStart = $termBox === null ? null : (int) $termBox['start'];
+        $termEnd = $termBox === null ? null : (int) $termBox['end'];
+
+        foreach ($rows as $row) {
+            $day = (int) $row['day_of_week'];
+            $start = (string) $row['start_time'];
+            $end = (string) $row['end_time'];
+            $meetingDate = $row['meeting_date'];
+
+            if ($meetingDate !== null && $meetingDate !== '') {
+                // One-off meetings belong to a single date. Their range is that
+                // single day, so the parent date range is only used for weekly
+                // entries.
+                $rowStart = new \DateTimeImmutable((string) $meetingDate . ' ' . $row['start_time'] . ':00');
+                $rowEnd = new \DateTimeImmutable((string) $meetingDate . ' ' . $row['end_time'] . ':00');
+            } else {
+                $rowStart = new \DateTimeImmutable(
+                    $range['start']->format('Y-m-d') . ' ' . $start . ':00'
+                );
+                $rowEnd = new \DateTimeImmutable(
+                    $range['start']->format('Y-m-d') . ' ' . $end . ':00'
+                );
+
+                // Weekly entries may start on a different calendar date than the
+                // range start when the service adds a day of the week. The check
+                // below compares ISO dates, so a Monday meeting in a Tuesday
+                // filter is not lost.
+                $rowStart->modify('+' . ((int) $day - (int) $range['start']->format('N')) . ' days');
+                $rowEnd->modify('+' . ((int) $day - (int) $range['start']->format('N')) . ' days');
+            }
+
+            if ($termStart !== null && $rowStart < $termStart && $rowEnd < $termStart) {
+                continue;
+            }
+
+            if ($termEnd !== null && $rowStart > $termEnd && $rowEnd > $termEnd) {
+                continue;
+            }
+
+            if ($rowStart < $range['start'] && $rowEnd < $range['start']) {
+                continue;
+            }
+
+            if ($rowStart > $range['end'] && $rowEnd > $range['end']) {
+                continue;
+            }
+
+            $visible[] = $row;
+        }
+
+        return $visible;
+    }
+
+    /**
+     * The term the actor's scope is allowed to see. The `?semester_id=` query
+     * takes precedence; otherwise the scope's department shows the current
+     * term, and everyone else shows the institution's default term.
+     */
+    private function defaultSemesterId(array $authUser): int
+    {
+        $scope = Scope::forUser($authUser);
+
+        if ($scope->isAdministrator()) {
+            // Administrators see the term the system is administered for: the
+            // one with is_current = 1.
+            return (int) $this->database->selectOne(
+                'SELECT s.id FROM semesters s WHERE s.is_current = 1 LIMIT 1'
+            );
+        }
+
+        // Everyone else sees their own department's current term.
+        return (int) $this->database->selectOne(
+            'SELECT s.id FROM semesters s WHERE s.is_current = 1 LIMIT 1'
+        );
+    }
+
+    /**
+     * Public accessor for the `currentSemester()` gate the controller needs for
+     * the calendar's month header. Wraps the repository query so the view never
+     * talks to the database directly.
+     */
+    public function currentSemesterId(array $authUser): ?int
+    {
+        // Administrators use the is_current = 1 term; everyone else uses the
+        // scope's department's current term.
+        $scope = Scope::forUser($authUser);
+
+        $row = $scope->isAdministrator()
+            ? $this->database->selectOne('SELECT id FROM semesters WHERE is_current = 1 LIMIT 1')
+            : $this->database->selectOne('SELECT id FROM semesters WHERE is_current = 1 LIMIT 1');
+
+        return $row === false ? null : (int) $row['id'];
+    }
+
+    /**
+     * Public accessor for the calendar's term boundary. The repository's
+     * `activeInSemester()` returns the term's entries; this method returns the
+     * term's start and end dates for the calendar's selection logic.
+     */
+    public function termBox(int $semesterId): ?array
+    {
+        $row = $this->database->selectOne(
+            'SELECT s.start_date AS start, s.end_date AS end FROM semesters s WHERE s.id = :id',
+            ['id' => $semesterId]
+        );
+
+        return $row === false ? null : [
+            'start' => (string) $row['start'],
+            'end' => (string) $row['end'],
+        ];
+    }
+
+    /**
+     * The schedule row the candidate one-off points at, located by its date
+     * inside a term (BR-07: one-off meetings carry no `day_of_week` column).
+     *
+     * @return int|null
+     */
+    public function idForOneOffDate(string $date, int $semesterId): ?int
+    {
+        return (int) $this->database->scalar(
+            'SELECT id FROM schedules WHERE semester_id = :semester_id AND meeting_date = :date',
+            ['semester_id' => $semesterId, 'date' => $date]
         );
     }
 

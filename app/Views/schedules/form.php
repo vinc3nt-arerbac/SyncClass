@@ -163,4 +163,132 @@ $disabled = $can_edit ? '' : 'disabled';
             <a class="button button-ghost" href="<?= $e($route('schedules.index')) ?>">Cancel</a>
         </div>
     </form>
+
+    <?php if ($hasConflicts ?? false): ?>
+        <?= $view->render('schedules/_conflict', ['schedule' => $schedule, 'conflicts' => $conflicts, 'alternatives' => $alternatives], null) ?>
+        <div class="form-actions form-actions--conflict">
+            <button type="button" class="button button-secondary" id="conflict-dismiss">Close</button>
+        </div>
+    <?php endif; ?>
+</section>
+
+<script>
+// Phase 11 conflict preview widget (BR-11). The teacher changes the room or
+// a time, the form posts /schedules/{id}/conflict-suggestions and the server
+// returns the *same* conflicts and alternatives without writing anything, so
+// the teacher can walk the fix before they save.
+(function () {
+    'use strict';
+
+    var form = document.querySelector('form[action*="/schedules"]');
+    if (!form) {
+        return;
+    }
+
+    var roomSelect = form.querySelector('select[name="room_id"]');
+    var startInput = form.querySelector('input[name="start_time"]');
+    var endInput = form.querySelector('input[name="end_time"]');
+    var preview = document.createElement('div');
+    preview.className = 'preview-nudge';
+    form.insertAdjacentElement('afterend', preview);
+
+    // Only engage once the conflict list has actually rendered.
+    var observer = new MutationObserver(function () {
+        if (document.querySelector('.alert-error')) {
+            observer.disconnect();
+            enablePreview();
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    function enablePreview() {
+        if (!roomSelect || !startInput || !endInput) {
+            return;
+        }
+
+        var box = document.createElement('div');
+        box.className = 'form-row';
+        box.innerHTML =
+            '<label class="field"><span>Quick fix (room / time)</span>'
+            + '<select class="pick" name="room_id"><option value="">Same room</option></select>'
+            + '<input type="time" class="pick" name="start_time">'
+            + '<input type="time" class="pick" name="end_time">'
+            + '<button type="button" class="button button-small" id="conflict-suggest">Show alternatives</button>'
+            + '</label>';
+        form.querySelector('.form-actions').insertAdjacentElement('beforebegin', box);
+
+        var suggest = box.querySelector('#conflict-suggest');
+        var picker = box.querySelector('.pick');
+
+        suggest.addEventListener('click', function () {
+            var payload = {
+                _token: '<?= $e($csrf_field()) ?>'.replace(/<[^>]+>/g, ''),
+                room_id: picker[1].value,
+                start_time: picker[2].value,
+                end_time: picker[3].value,
+            };
+
+            fetch('<?= $e($route('schedules.conflict_suggestions', ['id' => $schedule['id'] ?? 0])) ?>', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: Object.keys(payload).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(payload[k]); }).join('&')
+            })
+            .then(function (response) { return response.json().then(function (body) { return { ok: response.status < 400, body: body }; })
+            })
+            .then(function (result) {
+                preview.className = '';
+                if (result.ok) {
+                    preview.textContent = 'No conflicts — the room and time are free.';
+                    preview.style.color = 'var(--good)';
+                    return;
+                }
+
+                preview.innerHTML = '';
+                result.body.errors.forEach(function (conflict) {
+                    var div = document.createElement('div');
+                    div.className = 'alert alert-error';
+                    div.textContent = conflict.message;
+                    preview.appendChild(div);
+                });
+
+                if (result.body.alternatives.rooms && result.body.alternatives.rooms.length) {
+                    var row = document.createElement('div');
+                    row.className = 'list';
+                    row.innerHTML = '<strong><?= $e('Try another room') ?></strong>';
+                    result.body.alternatives.rooms.forEach(function (room) {
+                        var a = document.createElement('a');
+                        a.className = 'list-row';
+                        a.href = '<?= $e($route('schedules.edit', ['id' => $schedule['id'] ?? 0])) ?>';
+                        a.dataset.room = String(room.room_id);
+                        a.innerHTML = '<strong><?= $e($room['code'] ? $room['code'] . ' · ' . $room['room_type'] . ' · ' . $room['capacity'] . ' seats' : '') ?></strong>';
+                        row.appendChild(a);
+                    });
+                    preview.appendChild(row);
+                }
+
+                if (result.body.alternatives.slots && result.body.alternatives.slots.length) {
+                    var row = document.createElement('div');
+                    row.className = 'list';
+                    row.innerHTML = '<strong><?= $e('Try a different time') ?></strong>';
+                    result.body.alternatives.slots.forEach(function (slot) {
+                        var label = document.createElement('label');
+                        label.className = 'field-check';
+                        var input = document.createElement('input');
+                        input.type = 'radio';
+                        input.name = 'slot_preview';
+                        input.value = slot.start + '-' + slot.end;
+                        var span = document.createElement('span');
+                        span.textContent = slot.start + ' – ' + slot.end;
+                        label.appendChild(input);
+                        label.appendChild(span);
+                        row.appendChild(label);
+                    });
+                    preview.appendChild(row);
+                }
+            })
+            .catch(function () { preview.textContent = 'Request failed.'; });
+        });
+    }
+})();
+</script>
 </section>

@@ -799,6 +799,305 @@ tbody tr:hover {
 
 /* Scheduling (Phase 10) --------------------------------------------------- */
 
+/* ---- Calendar (CAL-01..CAL-06) ------------------------------------------------------ */
+/*
+ * The calendar reuses the gold/maroon tokens and Bootstrap 5 utility
+ * classes. Every component below is intentionally small: the layout is a
+ * grid of day cells, the colour of each chip is the department hex, and
+ * drag-and-drop is handled by calendar.js which delegates conflict
+ * handling to ConflictService (Phase 11).
+ */
+
+.cal-month-wrap,
+.cal-week-wrap,
+.cal-day-wrap,
+.cal-timetable {
+    --cal-dot-size: 8px;
+    --cal-dot-gap: 3px;
+}
+
+.cal-month-wrap {
+    display: block;
+    padding: 1.25rem 1rem;
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.35rem;
+    align-items: start;
+}
+
+.cal-day-name {
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 0.3rem 0;
+}
+
+.cal-week {
+    display: contents;
+}
+
+.cal-cell {
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    padding: 0.3rem;
+    min-height: 5.2rem;
+    background: var(--surface);
+    position: relative;
+    cursor: pointer;
+    transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.cal-cell:hover {
+    border-color: var(--primary-gold);
+    box-shadow: 0 0 0 2px rgb(201 162 39 / 45%);
+}
+
+.cal-cell.cal-today {
+    border-color: var(--primary-gold);
+    background: rgb(201 162 39 / 06%);
+}
+
+.cal-cell.cal-empty {
+    border-style: dashed;
+    cursor: default;
+}
+
+.cal-cell.cal-empty:hover {
+    background: transparent;
+}
+
+.cal-day {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--muted);
+    margin-bottom: 0.2rem;
+}
+
+.cal-dots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--cal-dot-gap);
+    align-items: flex-start;
+}
+
+.cal-dot {
+    display: inline-block;
+    width: var(--cal-dot-size);
+    height: var(--cal-dot-size);
+    border-radius: 50%;
+    flex: 0 0 var(--cal-dot-size);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* Week and day pivots: the horizontal time rail. */
+.cal-week-wrap,
+.cal-day-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+
+.cal-week-grid,
+.cal-day-grid {
+    display: grid;
+    grid-template-columns: 8rem 1fr;
+    gap: 0.5rem;
+    align-items: stretch;
+}
+
+.cal-cell-calendar {
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    background: var(--surface);
+    overflow: hidden;
+}
+
+.cal-day {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--muted);
+    background: rgb(255 255 255 / 08%);
+}
+
+.cal-time {
+    min-height: 14rem;
+}
+
+.cal-time-slot {
+    border-bottom: 1px solid var(--border);
+    position: relative;
+}
+
+.cal-time-label {
+    position: absolute;
+    left: 0.4rem;
+    top: 0.12rem;
+    font-size: 0.62rem;
+    color: var(--muted);
+}
+
+.cal-cell-small {
+    height: 30px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: none;
+}
+
+/* Timetable: rows are rooms, columns are 30-minute slots. */
+.cal-timetable {
+    display: block;
+    padding: 0.75rem;
+    overflow-x: auto;
+}
+
+.cal-t-head,
+.cal-t-row {
+    display: grid;
+    gap: 0.3rem;
+}
+
+.cal-t-head {
+    grid-template-columns: 6rem repeat(48, 1fr);
+    background: rgb(255 255 255 / 08%);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.cal-t-cell {
+    border: 1px solid var(--border);
+    border-top: none;
+    border-right: 1px solid var(--border);
+    min-width: 2.4rem;
+    background: var(--surface);
+}
+
+.cal-t-slot {
+    height: 2.2rem;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.cal-t-slot:hover {
+    background: rgb(201 162 39 / 10%);
+}
+
+.cal-t-slot.highlight {
+    background: rgb(201 162 39 / 22%);
+}
+
+.cal-t-cell.cal-t-room {
+    background: rgb(43 33 24 / 04%);
+    font-weight: 700;
+    color: var(--muted);
+    border-right: none;
+}
+
+/* Legend + filters --------------------------------------------- */
+.cal-legend {
+    margin-top: 0.75rem;
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-align: center;
+}
+
+.cal-toast {
+    position: fixed;
+    bottom: 1.25rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--primary-maroon);
+    color: #fff;
+    padding: 0.5rem 1rem;
+    border-radius: 0.4rem;
+    box-shadow: 0 6px 20px rgb(43 33 24 / 25%);
+    font-weight: 600;
+    z-index: 1000;
+}
+
+/* The term and filter bar on the calendar page. */
+.term-nav { margin-bottom: 0.25rem; }
+.term-link {
+    display: inline-block;
+    padding: 0.35rem 0.55rem;
+    background: rgb(201 162 39 / 08%);
+    color: var(--primary-maroon);
+    text-decoration: none;
+    border-radius: 0.35rem;
+    border: 1px solid var(--border);
+}
+.term-link:hover {
+    background: rgb(201 162 39 / 14%);
+}
+
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    align-items: flex-end;
+    margin-top: 0.5rem;
+}
+
+@media (min-width: 768px) {
+    .filters {
+        flex-wrap: nowrap;
+    }
+}
+
+/* Month navigation strip. */
+.month-picker {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.month-picker a.btn {
+    padding: 0.35rem 0.45rem;
+    font-size: 0.7rem;
+}
+
+.date-label {
+    min-width: 3.4rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.view-switcher {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.view-switcher a.btn {
+    padding: 0.3rem 0.45rem;
+    font-size: 0.7rem;
+}
+
+/* Month calendar - details drawer (CAL-06) --------------------------- */
+.cal-event-title {
+    font-weight: 700;
+    font-size: 0.78rem;
+    line-height: 1.25;
+    color: #2b2118;
+}
+
+.cal-event-notes {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 0.15rem;
+    line-height: 1.4;
+}
+
+
 .fieldset {
     margin: 0;
     padding: 0.9rem 1rem;
