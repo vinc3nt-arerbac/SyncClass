@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+namespace App\Repositories;
+
+use App\Core\Database;
+
 /**
  * Notifications (NTF-01…NTF-04).
  *
@@ -46,27 +50,49 @@ final class NotificationRepository extends MasterDataRepository
           FROM notifications n
          WHERE n.user_id = :user_id
          ORDER BY n.created_at DESC
-         LIMIT :limit OFFSET :offset
     SQL;
 
     private const COUNT = <<<'SQL'
         SELECT COUNT(*) FROM notifications WHERE user_id = :user_id
     SQL;
 
-    public function __construct(private readonly Database $database)
-    {
-    }
+    // Database comes from MasterDataRepository's constructor; the parent owns
+    // the property, so this class must not redeclare it (a readonly property
+    // cannot be re-declared by a child).
 
     /** @return array{id: int, user_id: int, type: string, title: string, body: string|null, subject_type: string|null, subject_id: int|null, action_url: string|null, channel: string, is_read: int, read_at: string|null, email_status: string, email_attempts: int, email_last_error: string|null, sent_at: string|null, created_at: string} */
     public function forUser(int $userId, int $limit = 50, int $offset = 0): array
     {
-        $rows = $this->database->select(self::SELECT, [
-            'user_id' => $userId,
-            'limit' => $limit,
-            'offset' => $offset,
-        ]);
+        // LIMIT/OFFSET are literal integers, not bound parameters: a native
+        // prepared statement rejects them as strings (see MasterDataRepository).
+        $limit = max(1, min(500, $limit));
+        $offset = max(0, $offset);
 
-        return $rows;
+        return $this->database->select(
+            self::SELECT . sprintf(' LIMIT %d OFFSET %d', $limit, $offset),
+            ['user_id' => $userId]
+        );
+    }
+
+    public function countForUser(int $userId): int
+    {
+        return (int) $this->database->scalar(
+            'SELECT COUNT(*) FROM notifications WHERE user_id = :user_id',
+            ['user_id' => $userId]
+        );
+    }
+
+    /**
+     * Remove one notification the user owns. Deleting by id + user_id means a
+     * guessed id can never remove somebody else's row.
+     */
+    public function delete(int $id, int $userId): int
+    {
+        return $this->database->delete(
+            'notifications',
+            'id = :id AND user_id = :user_id',
+            ['id' => $id, 'user_id' => $userId]
+        );
     }
 
     /** @return array<int, array{id: int, unread: int}> */
@@ -97,8 +123,7 @@ final class NotificationRepository extends MasterDataRepository
         );
     }
 
-    /** @return array<int, int> */
-    public function markReadAll(int $userId): array
+    public function markReadAll(int $userId): int
     {
         return $this->database->update(
             'notifications',

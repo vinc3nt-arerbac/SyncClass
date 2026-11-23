@@ -2,52 +2,62 @@
 
 declare(strict_types=1);
 
+namespace App\Services;
+
+use App\Core\Config;
+use App\Repositories\AuditRepository;
+use App\Repositories\NotificationRepository;
+
 /**
  * The notification hub (NTF-01…NTF-04).
  *
- * Four responsibilities, each a method with a single job:
+ * Responsibilities:
  *
- *   1. **Delivery.** `notify()` writes one in-app row and, when the channel is
- *      `email`/`both`, enqueues the SMTP packet. The actual send is async:
- *      `bin/dispatch-notifications.php` drains `email_status = pending`.
- *   2. **In-app reads.** `markAsRead(id)`, `markRead(until)`, `countUnread()`,
- *      `deleteForUser()` read the scoped inbox.
- *   3. **Scoping.** Every `user_id` is fixed at insert time; the controller
- *      never lets a view pick a recipient.
- *   4. **Audit.** Every payload is recorded in `activity_log` (SYS-02), so a
- *      deleted or orphaned account does not orphan the record of who was told.
+ *   1. **Delivery.** `notify()` writes one in-app row. The email leg is queued
+ *      in the same row (`email_status`), and `bin/dispatch-notifications.php`
+ *      drains that queue in a separate process so a slow SMTP host can never
+ *      delay a page response.
+ *   2. **Scoped reads.** Every method takes the authenticated user id and the
+ *      repository filters on `user_id`, so one account can never read or clear
+ *      another's inbox.
+ *   3. **Audit.** Each delivery is recorded in `activity_log` (SYS-02).
  *
- * Called from: the schedule/comment/change-request/task workflows, the
- * NotificationController (list + mark read), and the CLI dispatcher.
+ * The recipient is always chosen by the caller (the schedule, comment or task
+ * workflow that knows who is affected); nothing here infers an audience.
  */
 final class NotificationService
 {
     public function __construct(
         private readonly NotificationRepository $notifications,
-        private readonly AuthorizationService $authorization,
         private readonly AuditRepository $audit,
         private readonly Config $config
     ) {
     }
 
-    /** @param int|string|null $userId Set the recipient, never infer it. */
+    /**
+     * Write one notification for one user.
+     *
+     * @param string $type One of NotificationRepository::TYPES.
+     * @param string $channel One of NotificationRepository::CHANNELS.
+     */
     public function notify(
-        int|string|null $userId,
+        int $userId,
         string $type,
         string $title,
-        ?string $body,
+        ?string $body = null,
         string $channel = 'in_app',
         ?string $actionUrl = null
-    ): void {
-        $user = $this->userOrFail($userId);
+    ): int {
+        if ($userId <= 0) {
+            throw new \InvalidArgumentException('A notification needs a recipient.');
+        }
 
-        // The channel must be one the UI and the dispatcher agree on.
         if (!in_array($channel, NotificationRepository::CHANNELS, true)) {
             $channel = 'in_app';
         }
 
-        $this->notifications->create(
-            $user['id'],
+        $id = $this->notifications->create(
+            $userId,
             $type,
             $title,
             $body,
@@ -57,182 +67,75 @@ final class NotificationService
             $actionUrl
         );
 
-        // Every known payload lands in the audit trail, so NTF rows are
-        // traceable even if the account or the row is later removed.
         $this->audit->record(
-            $type,
-            $user['id'],
+            'notification.' . $type,
+            $userId,
             'notification',
-            $user['id'],
+            $id,
             $title,
-            ['user_id' => $user['id'], 'type' => $type, 'channel' => $channel],
-            $this->ip(),
-            $this->userAgent()
+            ['channel' => $channel, 'recipient_id' => $userId]
         );
+
+        return $id;
     }
 
-    /** @param int|string|null $userId null = the current actor (web) or none (CLI). */
-    public function markAsRead(int $id, int|string|null $userId): int
-    {
-        $user = $this->userOrFail($userId);
-
-        return $this->notifications->markAsRead($id, $user['id']);
-    }
-
-    /** @param int|string|null $userId */
-    public function markRead(int $userId, string $until): int
-    {
-        $user = $this->userOrFail($userId);
-
-        return $this->notifications->markRead($user['id'], $until);
-    }
-
-    /** @param int|string|null $userId */
-    public function countUnread(int $userId): int
-    {
-        $user = $this->userOrFail($userId);
-
-        return $this->notifications->countUnread($user['id']);
-    }
-
-    /** @param int|string|null $userId */
+    /**
+     * One page of the user's inbox plus the counters the badge needs.
+     *
+     * @return array{rows: array<int, array<string, mixed>>, total: int, unread: int, page: int, per_page: int, last_page: int}
+     */
     public function listForUser(int $userId, int $perPage = 50, int $page = 1): array
     {
-        $user = $this->userOrFail($userId);
+        $perPage = max(1, min(200, $perPage));
+        $page = max(1, $page);
 
-        $offset = max(0, ($page - 1) * $perPage);
-        $rows = $this->notifications->forUser($user['id'], $perPage, $offset);
+        $total = $this->notifications->countForUser($userId);
 
         return [
-            'rows' => $rows,
-            'total' => $this->notifications->scalar(
-                'SELECT COUNT(*) FROM notifications WHERE user_id = :uid',
-                ['uid' => $user['id']]
-            ),
-            'unread' => $this->notifications->countUnread($user['id']),
+            'rows' => $this->notifications->forUser($userId, $perPage, ($page - 1) * $perPage),
+            'total' => $total,
+            'unread' => $this->notifications->countUnread($userId),
+            'page' => $page,
+            'per_page' => $perPage,
+            'last_page' => max(1, (int) ceil($total / $perPage)),
         ];
     }
 
-    /**
-     * Push unread items ahead of the older-id marker so a long inbox does not
-     * re-render from the bottom on every page load. Returns ids the caller can
-     * hand to $row->deleteForUser() to prune the tail.
-     *
-     * @return array<int, int>
-     */
-    public function latestIds(int $userId, int $limit = 200): array
+    public function countUnread(int $userId): int
     {
-        $user = $this->userOrFail($userId);
-
-        $rows = $this->notifications->forUser(
-            $user['id'],
-            $limit,
-            0
-        );
-
-        return array_column($rows, 'id');
+        return $this->notifications->countUnread($userId);
     }
 
-    /** @param int|string|null $userId */
-    public function deleteForUser(int $userId, int $sinceId): int
+    /** Mark one notification read; returns the number of rows changed (0 or 1). */
+    public function markAsRead(int $id, int $userId): int
     {
-        $user = $this->userOrFail($userId);
-
-        return $this->notifications->deleteForUser($user['id'], $sinceId);
+        return $this->notifications->markAsRead($id, $userId);
     }
 
-    /**
-     * Drain the pending email queue into PHPMailer. Idempotent per call: each
-     * row's `email_status` is set to 'pending' once and handled exactly once.
-     * Returns the rows handed to the transport, keyed by row id.
-     *
-     * @return array<int, array{id: int, user_id: int, title: string, body: string, email_status: string, email_attempts: int, email_last_error: string|null}>
-     */
-    public function dispatchQueued(): array
+    /** Mark everything created up to `$until` read; returns the rows changed. */
+    public function markRead(int $userId, string $until): int
     {
-        $rows = $this->notifications->drainQueue();
+        return $this->notifications->markRead($userId, $until);
+    }
 
-        foreach ($rows as $row) {
-            $ok = $this->sendSmtp($row);
+    public function markReadAll(int $userId): int
+    {
+        return $this->notifications->markReadAll($userId);
+    }
 
-            // Record the outcome so a persistent SMTP failure is visible.
-            // The dispatcher drives retries: a row is only pending, sent, or
-            // exhausted attempts and marked failed. This method records the
-            // latest outcome so the row never stays stale.
-            $this->notifications->setEmailStatus((int) $row['id'], $ok ? 'sent' : 'failed');
-        }
-
-        return $rows;
+    /** Delete one notification the user owns. */
+    public function delete(int $id, int $userId): int
+    {
+        return $this->notifications->delete($id, $userId);
     }
 
     /**
-     * One send attempt. Caller catches PHPMailer exceptions, so this wraps the
-     * transport in try/catch and returns a plain boolean.
+     * Whether the email leg can run at all. Rows are still recorded in-app when
+     * this is false; the dispatcher simply leaves them pending.
      */
-    private function sendSmtp(array $row): bool
+    public function emailConfigured(): bool
     {
-        $attempts = (int) ($row['email_attempts'] ?? 0) + 1;
-
-        // With no SMTP configuration the queue is dormant: the dispatcher
-        // (bin/dispatch-notifications.php) skips pending rows and leaves
-        // them for the next run, so a request that lacks mail credentials
-        // never blocks on SMTP.
-        if (!$this->mailerIsConfigured()) {
-            return false;
-        }
-
-        // Resolve the deliverable address from the authoritative user row.
-        // Mailer is a thin PHPMailer wrapper; it does not know identity.
-        $recipient = $this->mailer->recipient($row);
-
-        if ($recipient === '') {
-            return false;
-        }
-
-        try {
-            $this->mailer->send($row);
-
-            return true;
-        } catch (Throwable $exception) {
-            // Keep the record of the failure; the dispatcher will retry.
-            return false;
-        }
+        return (bool) $this->config->get('mail.enabled', false)
+            && (string) $this->config->get('mail.host', '') !== '';
     }
-
-    private function userOrFail(int|string|null $userId): array
-    {
-        if ($userId === null) {
-            return []; // CLI/yield contexts pass nothing; the repo decides.
-        }
-
-        // Web context: the authenticated row already came from the DB; we
-        // validate it here so every caller gets the same guard.
-        if (!is_array($userId)) {
-            throw new InvalidArgumentException('Notification user must be an array row or null.');
-        }
-
-        if ((int) ($userId['id'] ?? 0) <= 0) {
-            throw new InvalidArgumentException('Notification user id is required.');
-        }
-
-        return $userId;
-    }
-
-    private function ip(): ?string
-    {
-        return $this->config->get('request.ip', null);
-    }
-
-    private function userAgent(): ?string
-    {
-        return $this->config->get('request.user_agent', null);
-    }
-
-    private function mailerIsConfigured(): bool
-    {
-        $host = $this->config->get('mail.host', '');
-
-        return $host !== '' && filter_var($host, FILTER_VALIDATE_DOMAIN);
-    }
-
 }

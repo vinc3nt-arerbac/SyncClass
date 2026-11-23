@@ -21,7 +21,35 @@ declare(strict_types=1);
  * for CAL-03 goes through `ConflictService::check()` (pure, side-effect-free)
  * exactly like the form's "what-if" widget.
  */
+
+use App\Core\Config;
+use App\Core\Database;
+use App\Repositories\BuildingRepository;
+use App\Repositories\FacultyRepository;
+use App\Repositories\PermissionRepository;
+use App\Repositories\RoleRepository;
+use App\Repositories\RoomRepository;
+use App\Repositories\ScheduleRepository;
+use App\Repositories\SectionRepository;
+use App\Repositories\SubjectRepository;
+use App\Repositories\TermRepository;
+use App\Services\AuthorizationService;
+use App\Services\ConflictService;
+use App\Services\RbacService;
+use App\Services\ScheduleService;
+use App\Services\Scope;
+
 require dirname(__DIR__) . '/vendor/autoload.php';
+
+/** @var array<int, array{label: string, passed: bool, detail: string}> $checks */
+$checks = [];
+
+function check(string $label, bool $passed, string $detail = ''): void
+{
+    global $checks;
+
+    $checks[] = ['label' => $label, 'passed' => $passed, 'detail' => $detail];
+}
 
 /** @var array<string, mixed> $config */
 $config = require dirname(__DIR__) . '/bootstrap.php';
@@ -44,8 +72,14 @@ $configObject = new Config($testConfig);
 
 $database = new Database($testConfig['database']);
 
+require dirname(__DIR__) . '/tests/support/auth_schema.php';
 require dirname(__DIR__) . '/tests/support/master_schema.php';
 require dirname(__DIR__) . '/tests/support/schedule_schema.php';
+
+// The fixtures only define the schema functions; the tables are created here.
+auth_schema($database);
+master_schema($database);
+schedule_schema($database);
 
 (new RbacService(
     new RoleRepository($database),
@@ -106,22 +140,15 @@ $faculty = new FacultyRepository($database);
 // A dedicated CAS faculty profile that teaches CS101A in the calendar fixture.
 // The users table carries the identity, faculty_profiles carries the
 // department/root, and schedules.faculty_id points at this profile.
-$database->insert(
-    'users',
-    [
-        'email' => 'faculty.jcruz@sac.edu.ph',
-        'password_hash' => password_hash('test-password', PASSWORD_DEFAULT),
-        'first_name' => 'Jean',
-        'last_name' => 'Cruz',
-        'role_id' => (int) $database->scalar(
-            'SELECT id FROM roles WHERE code = :code',
-            ['code' => 'faculty']
-        ),
-        'is_active' => 1,
-        'department_id' => $cas,
-    ]
-);
-$facultyCbaId = (int) $database->lastInsertId();
+// auth_create_user() fills the required identity columns (username, role,
+// password hash); a hand-written insert missed `username` and broke the run.
+$facultyCbaId = auth_create_user($database, [
+    'email' => 'faculty.jcruz@sac.edu.ph',
+    'role_code' => 'faculty',
+    'first_name' => 'Jean',
+    'last_name' => 'Cruz',
+    'department_id' => $cas,
+]);
 
 $facultyCas = $faculty->create([
     'faculty_id' => $facultyCbaId,
@@ -212,7 +239,7 @@ $facultyCasUser = $database->selectOne(
        FROM users u
        LEFT JOIN roles r ON r.id = u.role_id
       WHERE u.id = :id',
-    ['id' => $facultyCasId]
+    ['id' => $facultyCbaId]
 );
 
 // CAS department's calendar feed, scoped by year/semester.
@@ -241,7 +268,8 @@ check('CAL-05: range feed is bounded by the requested window', count($rows) === 
 // Push a first placement for the calendar fixture (room A-101, Monday
 // 09:00-10:30). The conflict engine then sees a second candidate at the same
 // room on the same weekday with an overlapping window → 409.
-$first = $service->create($admin, $meeting(), $admin);
+$adminScope = Scope::forUser($admin);
+$first = $service->create($adminScope, $meeting(), $admin);
 $firstPk = $first[0];
 
 // A conflicting candidate: same room, same weekday, with a 30-minute overlap
@@ -253,18 +281,21 @@ $overlap = $meeting([
 
 // ConflictService::check() is the Phase 11 pure rule evaluator; it is
 // side-effect-free, so the calendar drag can call it to preflight a move
-// without writing. Assert its API contract (409 + errors[] + alternatives[]).
-$conflictCheck = $conflict->check($admin, $overlap, $firstPk);
-check('CAL-03: conflict engine returns errors[] for a clash', count($conflictCheck['errors']) > 0);
-check('CAL-03: conflict engine returns alternatives[]', isset($conflictCheck['alternatives']) && is_array($conflictCheck['alternatives']));
-check('CAL-03: alternatives are bounded between 1 and 3', count($conflictCheck['alternatives']) <= 3);
-check('CAL-03: at least one alternative is offered', count($conflictCheck['alternatives']) >= 1);
+// without writing. The service exposes two calls: check() returns
+// {status, errors[], warnings[]} and suggestAlternatives() adds alternatives.
+$existing = $schedules->activeInSemester($semesterId);
+$resolved = $service->resolve($adminScope, $overlap);
+$conflictCheck = $conflict->check($resolved, $existing);
+check('CAL-03: conflict engine reports a clash', ($conflictCheck['status'] ?? '') === 'conflict'
+    && count($conflictCheck['errors']) > 0);
 
-if (!empty($conflictCheck['errors'])) {
-    echo '  [info] conflict errors: ' . implode('; ', $conflictCheck['errors']) . "\n";
-}
-if (!empty($conflictCheck['alternatives'])) {
-    $firstAlt = $conflictCheck['alternatives'][0];
+$suggestions = $conflict->suggestAlternatives($resolved, $existing);
+check('CAL-03: alternatives are offered on a clash',
+    isset($suggestions['alternatives']['rooms']) && is_array($suggestions['alternatives']['rooms']));
+check('CAL-03: room alternatives are bounded',
+    count($suggestions['alternatives']['rooms'] ?? []) <= ConflictService::ALTERNATIVE_MAX_ROOMS);
+
+if (!empty($suggestions['alternatives']['rooms'])) {
     echo '  [info] first alternative room: '
-        . ($firstAlt['room_code'] ?? 'n/a') . "\n";
+        . ($suggestions['alternatives']['rooms'][0]['code'] ?? 'n/a') . "\n";
 }

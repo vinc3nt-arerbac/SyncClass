@@ -52,7 +52,7 @@ $e = $e;
 
     <?php if ($current_semester !== null): ?>
         <nav class="term-nav" aria-label="Term">
-            <a class="term-link" href="<?= $e($route('calendar.month')) ?>">
+            <a class="term-link" href="<?= $e($route('calendar.index')) ?>">
                 <?= $e($current_semester['code'] . ' · ' . $current_semester['name']) ?>
             </a>
         </nav>
@@ -67,7 +67,7 @@ $e = $e;
                     <?php if ($item['disabled']): continue; endif; ?>
                     <a
                         class="btn <?= $index === 0 ? 'btn-outline-secondary' : 'btn-outline-primary' ?>"
-                        href="<?= $e($route('calendar.month')) ?>?year=<?= $e($item['year']) ?>&month=<?= $e($item['month']) ?>"
+                        href="<?= $e($route('calendar.month', ['year' => $item['year'], 'month' => $item['month']])) ?>"
                         <?= $index === 0 ? 'aria-disabled="true"' : '' ?>
                     >
                         <?= $e($item['label']) ?>

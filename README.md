@@ -1,6 +1,31 @@
 # SyncClass
 SyncClass: Avoid scheduling conflicts and maximize classroom utilization for modern classrooms
 
+**Release v1.0.0** · PHP 8.1+ · MySQL 8 / MariaDB · Apache / XAMPP
+
+## Install it
+
+XAMPP on Windows is the reference target (`D:\xampp8.2\htdocs\SyncClass`,
+`http://localhost/syncclass/`, database `anth04_SyncClass`). The short version:
+
+```bash
+composer install --no-dev
+copy .env.example .env
+# create database anth04_SyncClass (utf8mb4), then:
+mysql -u root anth04_SyncClass < database/schema/syncclass_complete.sql
+```
+
+`database/schema/syncclass_complete.sql` is the whole installation: 30 tables
+with indexes and foreign keys, the permission catalogue and role matrix, the
+initial settings, four demo roles and accounts, and the demo timetable. No
+further seeding is required.
+
+Full walkthrough, update workflow and troubleshooting: **[INSTALL.md](INSTALL.md)**.
+Release history: **[CHANGELOG.md](CHANGELOG.md)**.
+
+Demo sign-ins (password `SyncClass2026!`): `admin@sac.edu.ph`,
+`dean.csm@sac.edu.ph`, `secretary.csm@sac.edu.ph`, `jcruz@sac.edu.ph`.
+
 ## Documentation
 - [Requirements Analysis](docs/REQUIREMENTS.md) — Phase 1: scope, roles, functional/non-functional requirements, business rules
 - [System Architecture](docs/ARCHITECTURE.md) — Phase 2: layers, modules, request lifecycle, conflict detection, generator, security, ADRs, roadmap
@@ -12,11 +37,27 @@ SyncClass: Avoid scheduling conflicts and maximize classroom utilization for mod
 Native PHP 8.1+ (no framework) · MySQL 8 (`anth04_SyncClass`) · Bootstrap 5 · vanilla JS · FullCalendar · Chart.js · Apache / XAMPP
 
 ## Database
-Nine numbered migrations in `database/migrations/` are the source of truth; `database/schema/SyncClass.sql` is generated from them with `php database/schema/build.php`.
+Nine numbered migrations in `database/migrations/` are the source of truth;
+`database/schema/SyncClass.sql` is generated from them with
+`php database/schema/build.php`. The **release** artifact is
+`database/schema/syncclass_complete.sql`, which layers the RBAC catalogue, the
+settings seeders and the demo data set on top of that schema:
 
 ```bash
-mysql -u root < database/schema/SyncClass.sql   # creates anth04_SyncClass and all 30 tables
+php database/schema/build.php   # schema only (after changing migrations)
+php bin/sync-rbac.php           # permissions + role matrix
+php bin/seed-demo.php           # demo departments, faculty, catalogue, timetable
+php bin/export-sql.php          # rebuild syncclass_complete.sql from all of the above
 ```
+
+Import the complete file into an empty database for a fresh install:
+
+```bash
+mysql -u root anth04_SyncClass < database/schema/syncclass_complete.sql
+```
+
+`php bin/export-sql.php` also accepts `--schema` to emit schema + seeders only
+(no demo data).
 
 ## Local setup
 ```bash
@@ -28,6 +69,7 @@ php tests/core_framework_test.php       # Phase 6 kernel, router, middleware, DB
 php tests/auth_test.php                 # Phase 7 login, throttle, remember-me, logout
 php tests/rbac_test.php                 # Phase 8 permissions, scope, guarded routes
 php tests/master_data_test.php          # Phase 9 master-data CRUD, scope, invariants
+php tests/calendar_test.php             # calendar feed, recurring occurrences, conflicts
 php tests/schedule_test.php             # Phase 10 meetings, validation, lifecycle, scope
 composer run test:schedule              # same file through Composer
 php -S 127.0.0.1:8000 -t public         # http://127.0.0.1:8000/ and /health

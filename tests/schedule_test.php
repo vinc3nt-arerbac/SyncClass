@@ -627,14 +627,13 @@ check('room alternatives are active and same-term',
 // the shape, not the build, because the route is the consumer.
 
 // Valid pending entry so the conflict preview is meaningful even before
-// the first conflict is created: `$facultyCasId` is the CAS department's
-// faculty account, and the test's meeting() shapes consume a CAS professor
-// (SECTION-6), so resolve() derives a CAS department and the engine sees a
-// clean placement with no clash (BR-01 half-open, same weekday, no overlap).
+// the first conflict is created. `faculty_id` is a faculty_profiles.id, not a
+// users.id: passing the account id made resolve() reject the row because that
+// profile belongs to another department.
 $cleanPk = null;
 $cleanRows = $service->create($secretaryScope, $meeting([
     'room_id' => $otherRoom,
-    'faculty_id' => $facultyCasId,
+    'faculty_id' => $profileCas,
     'days' => [($validCandidateWeekday + 2) % 7 + 1],
     'start_time' => '11:00',
     'end_time' => '12:00',
@@ -646,21 +645,25 @@ if (count($cleanRows) === 1) {
 // A conflicting candidate in the same term so the endpoint returns 409.
 $clashingCandidate = $meeting([
     'room_id' => $lectureRoom,
-    'faculty_id' => $facultyCas2Id,
+    'faculty_id' => $profileCas2,
     'days' => [(int) $meeting()['days'][0]],
     'start_time' => '09:00',
     'end_time' => '10:30',
     'notes' => 'phase 11 http clash',
 ]);
-$clashRows = $service->create($secretaryScope, $clashingCandidate, $secretary);
-$clashId = $clashRows[0] ?? null;
+// create() refuses the clash itself (422); the preview endpoint is the surface
+// that turns the same refusal into 409 + alternatives. Reuse an existing
+// meeting as the schedule the preview is requested for.
+check('a clashing write is refused by create()',
+    http_status(fn () => $service->create($secretaryScope, $clashingCandidate, $secretary)) === 422);
+$clashId = $ids[0] ?? null;
 if ($clashId > 0) {
     $conflictPayload = [
         '_token' => $token,
         'semester_id' => (string) $openSemester,
         'section_id' => (string) $sectionCas,
         'subject_id' => (string) $subjectCas,
-        'faculty_id' => (string) $facultyCas2Id,
+        'faculty_id' => (string) $profileCas2,
         'room_id' => (string) $lectureRoom,
         'start_time' => '09:00',
         'end_time' => '10:30',
@@ -687,7 +690,7 @@ if ($clashId > 0) {
     // A clean candidate in the free slot must be a 200.
     $cleanCandidate = $meeting([
         'room_id' => $otherRoom,
-        'faculty_id' => $facultyCas2Id,
+        'faculty_id' => $profileCas2,
         'days' => [(int) $meeting()['days'][0]],
         'start_time' => '11:00',
         'end_time' => '12:00',
@@ -717,13 +720,14 @@ $dateClashCandidate = $meeting([
     'meeting_date' => '2026-09-08',
     'days' => [],
     'room_id' => $lectureRoom,
-    'faculty_id' => $facultyCas2Id,
+    'faculty_id' => $profileCas2,
     'start_time' => '13:00',
     'end_time' => '14:30',
     'notes' => 'phase 11 one-off date clash',
 ]);
-$dateClashRows = $service->create($secretaryScope, $dateClashCandidate, $secretary);
-$dateClashId = $dateClashRows[0] ?? null;
+check('a second one-off on the same date is refused',
+    http_status(fn () => $service->create($secretaryScope, $dateClashCandidate, $secretary)) === 422);
+$dateClashId = $clashId;
 if ($dateClashId > 0) {
     $dateConflictResponse = $kernel->handle(
         new Request('POST', '/schedules/' . $dateClashId . '/conflict-suggestions', body: [

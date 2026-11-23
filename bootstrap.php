@@ -8,7 +8,8 @@ declare(strict_types=1);
  * Responsibilities (Phase 4 scope):
  *   1. define the path constants the rest of the codebase relies on;
  *   2. load the Composer autoloader, failing with an actionable message;
- *   3. load configuration (defaults, then config/local.php overrides);
+ *   3. load configuration (defaults, then .env, then config/local.php
+ *      overrides);
  *   4. configure timezone, error reporting and the log destination;
  *   5. install a last-resort exception handler that never leaks internals
  *      when debug mode is off.
@@ -41,6 +42,65 @@ if (!is_file($autoloadPath)) {
 }
 
 require $autoloadPath;
+
+/**
+ * Optional `.env` file at the project root.
+ *
+ * config/*.php read their values with getenv(), so a deployment can either
+ * export real environment variables, write config/local.php, or copy
+ * .env.example to .env. Real environment variables always win: a key is only
+ * exported when it is not already set, which also keeps `php -S APACHE`-style
+ * overrides and CI secrets authoritative over a stale local file.
+ *
+ * Format: KEY=VALUE per line, `#` comments, optional surrounding quotes.
+ */
+(static function (string $path): void {
+    if (!is_file($path) || !is_readable($path)) {
+        return;
+    }
+
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+
+    if ($lines === false) {
+        return;
+    }
+
+    foreach ($lines as $line) {
+        $line = trim($line);
+
+        if ($line === '' || str_starts_with($line, '#')) {
+            continue;
+        }
+
+        if (str_starts_with($line, 'export ')) {
+            $line = trim(substr($line, 7));
+        }
+
+        $separator = strpos($line, '=');
+
+        if ($separator === false) {
+            continue;
+        }
+
+        $key = trim(substr($line, 0, $separator));
+        $value = trim(substr($line, $separator + 1));
+
+        if ($key === '' || getenv($key) !== false) {
+            continue;
+        }
+
+        if (strlen($value) >= 2) {
+            $first = $value[0];
+            $last = $value[strlen($value) - 1];
+
+            if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+                $value = substr($value, 1, -1);
+            }
+        }
+
+        putenv($key . '=' . $value);
+    }
+})(BASE_PATH . '/.env');
 
 /** @var array<string, mixed> $config */
 $config = [

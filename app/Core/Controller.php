@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core;
 
 use App\Helpers\Validator;
+use App\Services\AuthorizationService;
 
 /**
  * Base controller (Phase 6).
@@ -97,5 +98,73 @@ abstract class Controller
         $id = $this->request->attribute('auth_user_id');
 
         return is_int($id) ? $id : null;
+    }
+
+    /**
+     * The authenticated user row, set by the Authenticate middleware.
+     *
+     * Controllers must not read the session themselves: the middleware already
+     * resolved (and re-validated) the account, and a missing row here means the
+     * route was reached without `auth`, which is a programming error worth a
+     * 401 rather than a null pointer later.
+     *
+     * @return array<string, mixed>
+     */
+    protected function actor(?Request $request = null): array
+    {
+        $request ??= $this->request;
+        $user = $request->attribute('auth_user');
+
+        if (!is_array($user) || (int) ($user['id'] ?? 0) <= 0) {
+            $this->abort(401, 'Sign in to continue.');
+        }
+
+        return $user;
+    }
+
+    /**
+     * Defence in depth for routes whose middleware already checked the
+     * permission: the same matrix is consulted again before the action runs, so
+     * a controller invoked outside its route (a test, a future CLI action) still
+     * cannot act beyond the actor's grants.
+     *
+     * @param array<string, mixed> $authUser
+     */
+    protected function authorize(array $authUser, string ...$permissions): void
+    {
+        if ($permissions === []) {
+            return;
+        }
+
+        $authorization = Kernel::current()?->container()->get(AuthorizationService::class);
+
+        if (!$authorization instanceof AuthorizationService) {
+            throw new \RuntimeException('Authorization is unavailable: boot the kernel before dispatching a controller.');
+        }
+
+        foreach ($permissions as $permission) {
+            if ($authorization->can($authUser, $permission)) {
+                return;
+            }
+        }
+
+        $this->abort(403, 'You do not have permission to perform this action.');
+    }
+
+    /**
+     * The `<meta name="csrf-token">` tag for views that call the JSON API.
+     *
+     * The token itself lives in the session-bound Security service, so this is
+     * only reachable once the session middleware has run.
+     */
+    protected function csrfMeta(): string
+    {
+        $security = Kernel::current()?->container()->get(Security::class);
+
+        if (!$security instanceof Security) {
+            throw new \RuntimeException('CSRF support is unavailable: boot the kernel before dispatching a controller.');
+        }
+
+        return $security->csrfMeta();
     }
 }

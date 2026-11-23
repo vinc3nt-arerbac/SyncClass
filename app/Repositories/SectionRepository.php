@@ -166,4 +166,33 @@ final class SectionRepository extends MasterDataRepository
 
         return $value === '' ? null : $value;
     }
+
+    /**
+     * Active sections of the supplied departments, for the timetable generator.
+     *
+     * Sections are not bound to one term in this schema (they carry a year
+     * level and a department), so the term id is accepted for call-site
+     * symmetry and used only once a curriculum row ties a section to a term.
+     *
+     * @param array<int, int|string> $departmentIds Empty = every department.
+     * @return array<int, array<string, mixed>>
+     */
+    public function bySemesterAndDepartments(int $semesterId, array $departmentIds = []): array
+    {
+        $bindings = [];
+        $sql = self::SELECT . ' WHERE s.is_active = 1';
+
+        if ($departmentIds !== []) {
+            $placeholders = [];
+            foreach (array_values($departmentIds) as $index => $departmentId) {
+                $key = 'dept_' . $index;
+                $placeholders[] = ':' . $key;
+                $bindings[$key] = (int) $departmentId;
+            }
+
+            $sql .= ' AND s.department_id IN (' . implode(', ', $placeholders) . ')';
+        }
+
+        return $this->database->select($sql . ' ORDER BY s.department_id, s.year_level, s.code', $bindings);
+    }
 }

@@ -300,18 +300,18 @@ final class ScheduleRepository extends MasterDataRepository
             $semesterId = $this->defaultSemesterId($authUser);
         }
 
-        // The date range the calendar paints: weekly entries begin on the first
-        // day of the week, one-off entries on their own meeting date.
-        $range = [
-            'start' => new \DateTimeImmutable($startIso),
-            'end' => new \DateTimeImmutable($endIso),
-        ];
+        // The date range the calendar paints, clipped to the term so a request
+        // for a year cannot paint meetings that term never had. Dates are
+        // compared as `Y-m-d` strings, which sidesteps timezone drift between
+        // PHP's clock and the DATETIME values stored by MySQL.
+        $rangeStart = (new \DateTimeImmutable($startIso))->format('Y-m-d');
+        $rangeEnd = (new \DateTimeImmutable($endIso))->format('Y-m-d');
 
         $scope = Scope::forUser($authUser);
 
         $rows = $this->activeInSemester($semesterId);
         $rows = array_values(
-            array_filter($rows, static function (array $row): bool use ($scope): bool {
+            array_filter($rows, static function (array $row) use ($scope): bool {
                 if ($scope->isAdministrator()) {
                     return true;
                 }
@@ -328,56 +328,54 @@ final class ScheduleRepository extends MasterDataRepository
             })
         );
 
-        $visible = [];
         $termBox = $this->termBox($semesterId);
-        $termStart = $termBox === null ? null : (int) $termBox['start'];
-        $termEnd = $termBox === null ? null : (int) $termBox['end'];
+
+        if ($termBox !== null) {
+            $rangeStart = max($rangeStart, $termBox['start']);
+            $rangeEnd = min($rangeEnd, $termBox['end']);
+        }
+
+        if ($rangeEnd < $rangeStart) {
+            return [];
+        }
+
+        $visible = [];
 
         foreach ($rows as $row) {
-            $day = (int) $row['day_of_week'];
-            $start = (string) $row['start_time'];
-            $end = (string) $row['end_time'];
             $meetingDate = $row['meeting_date'];
 
+            // One-off meetings happen on exactly one date.
             if ($meetingDate !== null && $meetingDate !== '') {
-                // One-off meetings belong to a single date. Their range is that
-                // single day, so the parent date range is only used for weekly
-                // entries.
-                $rowStart = new \DateTimeImmutable((string) $meetingDate . ' ' . $row['start_time'] . ':00');
-                $rowEnd = new \DateTimeImmutable((string) $meetingDate . ' ' . $row['end_time'] . ':00');
-            } else {
-                $rowStart = new \DateTimeImmutable(
-                    $range['start']->format('Y-m-d') . ' ' . $start . ':00'
-                );
-                $rowEnd = new \DateTimeImmutable(
-                    $range['start']->format('Y-m-d') . ' ' . $end . ':00'
-                );
+                $date = substr((string) $meetingDate, 0, 10);
 
-                // Weekly entries may start on a different calendar date than the
-                // range start when the service adds a day of the week. The check
-                // below compares ISO dates, so a Monday meeting in a Tuesday
-                // filter is not lost.
-                $rowStart->modify('+' . ((int) $day - (int) $range['start']->format('N')) . ' days');
-                $rowEnd->modify('+' . ((int) $day - (int) $range['start']->format('N')) . ' days');
-            }
+                if ($date >= $rangeStart && $date <= $rangeEnd) {
+                    $row['occurrence_date'] = $date;
+                    $visible[] = $row;
+                }
 
-            if ($termStart !== null && $rowStart < $termStart && $rowEnd < $termStart) {
                 continue;
             }
 
-            if ($termEnd !== null && $rowStart > $termEnd && $rowEnd > $termEnd) {
-                continue;
+            // Weekly meetings recur: the feed has to emit one entry per
+            // occurrence inside the range, otherwise FullCalendar would paint a
+            // single week (or nothing at all when the range starts mid-week).
+            $day = (int) $row['day_of_week'];
+            $cursor = new \DateTimeImmutable($rangeStart);
+            $offset = ($day - (int) $cursor->format('N') + 7) % 7;
+            $cursor = $cursor->modify('+' . $offset . ' days');
+
+            while ($cursor->format('Y-m-d') <= $rangeEnd) {
+                $occurrence = $row;
+                $occurrence['occurrence_date'] = $cursor->format('Y-m-d');
+                $visible[] = $occurrence;
+
+                $cursor = $cursor->modify('+7 days');
             }
 
-            if ($rowStart < $range['start'] && $rowEnd < $range['start']) {
-                continue;
+            // A pathological request (a decade) must not exhaust memory.
+            if (count($visible) >= 5000) {
+                break;
             }
-
-            if ($rowStart > $range['end'] && $rowEnd > $range['end']) {
-                continue;
-            }
-
-            $visible[] = $row;
         }
 
         return $visible;
@@ -392,18 +390,14 @@ final class ScheduleRepository extends MasterDataRepository
     {
         $scope = Scope::forUser($authUser);
 
-        if ($scope->isAdministrator()) {
-            // Administrators see the term the system is administered for: the
-            // one with is_current = 1.
-            return (int) $this->database->selectOne(
-                'SELECT s.id FROM semesters s WHERE s.is_current = 1 LIMIT 1'
-            );
-        }
-
-        // Everyone else sees their own department's current term.
-        return (int) $this->database->selectOne(
+        // Both branches resolve the term marked current. selectOne() returns a
+        // row (or null), so the id has to be read from the row: casting the
+        // whole array to int would always yield 1.
+        $row = $this->database->selectOne(
             'SELECT s.id FROM semesters s WHERE s.is_current = 1 LIMIT 1'
         );
+
+        return (int) ($row['id'] ?? 0);
     }
 
     /**
@@ -436,7 +430,7 @@ final class ScheduleRepository extends MasterDataRepository
             ['id' => $semesterId]
         );
 
-        return $row === false ? null : [
+        return $row === null ? null : [
             'start' => (string) $row['start'],
             'end' => (string) $row['end'],
         ];

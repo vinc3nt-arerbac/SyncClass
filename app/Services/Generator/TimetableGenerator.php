@@ -67,7 +67,7 @@ final class TimetableGenerator
      * @param array<string, mixed> $input
      * @return array{all_drafts: array<int, TimetableDraft>, best: TimetableDraft|null, metrics: array<string, mixed>, unsat: array<int, array{code: string, message: string}>, error: string|null}
      */
-    public function plan(array $input): array
+    public function plan(array $input, ?Scope $scope = null): array
     {
         $semesterId = $this->int($input['semester_id'] ?? null);
         $departmentIds = (array) ($input['department_ids'] ?? []);
@@ -81,12 +81,13 @@ final class TimetableGenerator
                 'metrics' => ['utilization' => 0.0, 'load_balance' => 0.0],
                 'unsat' => [['code' => 'GEN-03', 'message' => 'No current term selected. Select a current term (is_current = 1) in the master data.']],
                 'error' => null,
+                'demands' => [],
             ];
         }
 
-        // Resolve the scope, so a dean sees their department, a secretary sees
-        // theirs, faculty see their own, administrators everything.
-        $scope = Scope::system();
+        // The caller passes the actor's scope; `system()` is only the fallback
+        // for a CLI run. A dean therefore generates inside their own department.
+        $scope ??= Scope::system();
         if ($departmentIds === []) {
             $departmentId = $scope->isAdministrator()
                 ? $this->defaultDepartment($scope)
@@ -131,6 +132,9 @@ final class TimetableGenerator
                 'all_drafts' => [],
                 'best' => null,
                 'metrics' => [],
+                // The demand rows are returned even on failure: the result view
+                // explains which sections could not be placed.
+                'demands' => $demandTable,
                 'unsat' => $this->unsatisfiable($demandTable, $candidates),
                 'error' => 'The timetable is unsatisfiable: the generator\'s node or wall-clock budget expired. '
                     . 'Reduce the demand (fewer sections/subjects) or add rooms and faculty before retrying.',
@@ -144,6 +148,10 @@ final class TimetableGenerator
             'all_drafts' => [$bestDraft],
             'best' => $bestDraft,
             'metrics' => $metrics,
+            // Placements are keyed by demand index and carry no section or
+            // subject of their own; the commit step joins them back through
+            // this table, which is why it has to travel with the draft.
+            'demands' => $demandTable,
             'unsat' => [],
             'error' => null,
         ];
@@ -271,7 +279,7 @@ final class TimetableGenerator
         $max = (int) $this->configObject->get('schedule.max_duration_minutes', 240);
 
         $breaks = [];
-        foreach ((array) ($this->configObject->get('schedule.breaks', []) as $break) {
+        foreach ((array) $this->configObject->get('schedule.breaks', []) as $break) {
             $breaks[] = [$this->minutes($break['start'] ?? '12:00'), $this->minutes($break['end'] ?? '13:00')];
         }
 

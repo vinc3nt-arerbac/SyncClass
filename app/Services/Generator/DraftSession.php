@@ -48,7 +48,7 @@ final class DraftSession
     public float $timeStarted = 0.0;
 
     /** Current running time in seconds */
-    public float $elapsed(): float
+    public function elapsed(): float
     {
         return microtime(true) - $this->timeStarted;
     }

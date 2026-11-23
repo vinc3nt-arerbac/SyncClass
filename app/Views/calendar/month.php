@@ -124,7 +124,7 @@ foreach ($feed as $entry) {
  * 12 × 12 rounded square that the drag-and-drop stub uses as the touch
  * target; FullCalendar replaces it with its own event tile at runtime.
  */
-private function renderDots(array $entries, callable $e): string
+function renderDots(array $entries, callable $e): string
 {
     $dots = [];
     foreach ($entries as $entry) {

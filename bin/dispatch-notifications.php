@@ -24,15 +24,13 @@ $config = require dirname(__DIR__) . '/bootstrap.php';
 $database = new Database((array) $config['database']);
 $repository = new NotificationRepository($database);
 
-// The queue only exists when SMTP is actually configured. PHPMailer is a
-// composer dependency with a hard `require`, so `class_exists` answers the
-// question without autoloading the whole application.
+// The queue only has work when SMTP is actually configured: the feature flag
+// must be on and the host must not still be the shipped placeholder.
 $enabled = (bool) ($config['mail']['enabled'] ?? false);
-$hasSmtp = ((string) ($config['mail']['host'] ?? '') !== '')
-    && ((string) ($config['mail']['username'] ?? '') !== '')
-    || (string) ($config['mail']['host'] ?? '') !== 'smtp.example.edu';
+$host = trim((string) ($config['mail']['host'] ?? ''));
+$hasSmtp = $enabled && $host !== '' && $host !== 'smtp.example.edu';
 
-if (!$enabled && !$hasSmtp) {
+if (!$hasSmtp) {
     echo "SMTP is not configured (mail.enabled = false and no host set).\n" .
         "In-app notifications are still recorded; the email queue stays empty.\n";
     exit(0);
@@ -57,7 +55,7 @@ try {
         // Every row in the queue has already been persisted with
         // `email_status = pending`; we only write back on success or final failure.
         try {
-            Mailer::fromArray($config['mail'])->send($row);
+            Mailer::fromArray((array) $config['mail'], $database)->send($row);
 
             $repository->setEmailStatus((int) $row['id'], 'sent');
 

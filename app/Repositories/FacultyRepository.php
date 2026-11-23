@@ -258,4 +258,54 @@ final class FacultyRepository extends MasterDataRepository
 
         return $value === '' ? null : $value;
     }
+
+    /**
+     * Active teachers the actor may see, for the calendar's teacher filter.
+     *
+     * @param array<string, mixed> $authUser
+     * @return array<int, array<string, mixed>>
+     */
+    public function optionsFor(array $authUser): array
+    {
+        $scope = Scope::forUser($authUser);
+
+        $rows = $this->database->select(
+            self::SELECT . ' WHERE f.is_active = 1 ORDER BY u.last_name, u.first_name'
+        );
+
+        return array_values(array_filter(
+            $rows,
+            static fn (array $row): bool => $scope->coversDepartment((int) $row['department_id'])
+        ));
+    }
+
+    /**
+     * Every active teacher, for the generator's candidate space.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function allActive(): array
+    {
+        return $this->database->select(
+            self::SELECT . ' WHERE f.is_active = 1 ORDER BY f.department_id, u.last_name'
+        );
+    }
+
+    /**
+     * Active teachers of one department within the actor's scope.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function byDepartment(Scope $scope, int $departmentId): array
+    {
+        if (!$scope->coversDepartment($departmentId)) {
+            return [];
+        }
+
+        return $this->database->select(
+            self::SELECT . ' WHERE f.is_active = 1 AND f.department_id = :department_id'
+            . ' ORDER BY u.last_name, u.first_name',
+            ['department_id' => $departmentId]
+        );
+    }
 }

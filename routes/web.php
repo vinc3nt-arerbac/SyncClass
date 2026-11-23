@@ -31,6 +31,7 @@ declare(strict_types=1);
  */
 
 use App\Controllers\AuthController;
+use App\Controllers\CalendarController;
 use App\Controllers\HealthController;
 use App\Controllers\HomeController;
 use App\Controllers\MasterData\AcademicYearController;
@@ -41,6 +42,7 @@ use App\Controllers\MasterData\RoomController;
 use App\Controllers\MasterData\SectionController;
 use App\Controllers\MasterData\SemesterController;
 use App\Controllers\MasterData\SubjectController;
+use App\Controllers\NotificationController;
 use App\Controllers\PipelineController;
 use App\Controllers\Scheduling\ScheduleController;
 use App\Controllers\Generator\GeneratorController;
@@ -51,7 +53,6 @@ use App\Core\Router;
 return static function (Router $router, Container $container): void {
     // Web API: front-controller dispatches api.php before web.php.
     // (api.php registers REST endpoints; web.php declares page routes.)
-};
     // -----------------------------------------------------------------------
     // Public: authentication (AUTH-01, AUTH-04)
     // -----------------------------------------------------------------------
@@ -260,12 +261,9 @@ return static function (Router $router, Container $container): void {
     $router->post('/generator/commit', [GeneratorController::class, 'commit'], ['auth', 'permission:generator.approve'], 'Commit generated schedule')
         ->name('generator.commit');
 
-    // -----------------------------------------------------------------------
-    // End of Phase 12–13 routes.
-    // -----------------------------------------------------------------------
-
-    // -----------------------------------------------------------------------
-    // Phase 14: Notifications (NTF-01…NTF-04).
+    
+    // Phase 14: Notifications
+    // ----------------------------------------------------------------------- (NTF-01…NTF-04).
     // -----------------------------------------------------------------------
     $router->get('/notifications', [NotificationController::class, 'index'], ['auth', 'permission:notifications.view'], 'Notifications')
         ->name('notifications.index');
@@ -276,7 +274,4 @@ return static function (Router $router, Container $container): void {
     $router->post('/notifications/{id}/delete', [NotificationController::class, 'destroy'], ['auth', 'permission:notifications.view'], 'Delete notification')
         ->name('notifications.destroy');
 
-    // -----------------------------------------------------------------------
-    // End of Phase 14 routes.
-    // -----------------------------------------------------------------------
 };

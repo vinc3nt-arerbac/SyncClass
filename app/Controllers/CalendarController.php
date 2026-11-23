@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Core\Config;
 use App\Core\Controller;
 use App\Core\Request;
 use App\Core\Response;
@@ -176,9 +177,9 @@ final class CalendarController extends Controller
     /**
      * @param array<string, mixed> $user
      */
-    private function intParam(?string $value, string $fallback): int
+    private function intParam(?string $value, ?string $fallback = null): int
     {
-        $value = (string) ($value ?? $fallback);
+        $value = (string) ($value ?? $fallback ?? '');
         $value = trim($value);
 
         return $value === '' ? 0 : (int) $value;

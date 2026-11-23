@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
+use App\Services\Scope;
+
 /**
  * Rooms (MD-02, CNF-05).
  *
@@ -155,5 +157,58 @@ final class RoomRepository extends MasterDataRepository
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    /**
+     * Active rooms for a filter dropdown.
+     *
+     * Rooms are shared institutional space: they belong to a building, not to a
+     * department, so every signed-in actor sees the same list. Department
+     * scoping applies to the schedules booked into a room, not to the room.
+     *
+     * @param array<string, mixed> $authUser
+     * @return array<int, array<string, mixed>>
+     */
+    public function optionsFor(array $authUser = []): array
+    {
+        return $this->database->select(
+            'SELECT r.id, r.code, r.name, r.room_type, r.capacity, b.code AS building_code'
+            . ' FROM rooms r INNER JOIN buildings b ON b.id = r.building_id'
+            . ' WHERE r.is_active = 1 ORDER BY b.code, r.code'
+        );
+    }
+
+    /**
+     * Rooms that can host a subject, for the generator's candidate space.
+     *
+     * The subject's preferred room type wins; otherwise the subject type decides
+     * (a laboratory or mixed subject needs a laboratory, everything else a
+     * lecture room). Capacity is returned as well so the caller can prefer a
+     * room that fits the section.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function bySubjectAndScope(int $subjectId, Scope $scope, int $departmentId): array
+    {
+        $subject = $this->database->selectOne(
+            'SELECT subject_type, preferred_room_type FROM subjects WHERE id = :id LIMIT 1',
+            ['id' => $subjectId]
+        );
+
+        $type = (string) ($subject['preferred_room_type'] ?? '');
+
+        if ($type === '') {
+            $type = in_array((string) ($subject['subject_type'] ?? 'lecture'), ['laboratory', 'mixed'], true)
+                ? 'laboratory'
+                : 'lecture';
+        }
+
+        return $this->database->select(
+            'SELECT r.id, r.code, r.room_type, r.capacity, b.code AS building_code'
+            . ' FROM rooms r INNER JOIN buildings b ON b.id = r.building_id'
+            . ' WHERE r.is_active = 1 AND r.room_type = :type'
+            . ' ORDER BY r.capacity DESC, r.id',
+            ['type' => $type]
+        );
     }
 }

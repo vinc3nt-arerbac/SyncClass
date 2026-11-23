@@ -187,6 +187,15 @@ final class ConflictService
                     continue;
                 }
 
+                // Cross-department coordination is about a *room* hosting two
+                // departments at once: a CAS class and a CBA class in different
+                // rooms at 10:00 are normal, so only a shared room is examined
+                // here. (Without this guard every department's timetable blocked
+                // every other department's, which made the week unusable.)
+                if ((int) $meeting['room_id'] !== (int) ($candidate['room']['id'] ?? 0)) {
+                    continue;
+                }
+
                 if ($this->overlaps(
                     (string) $candidate['start_time'],
                     (string) $candidate['end_time'],
@@ -322,13 +331,11 @@ final class ConflictService
             : $candidateDay;
 
         $candidateRoom = (int) ($candidate['room']['id'] ?? 0);
-        // The faculty rule compares teachers (user ids): `$candidate['faculty']`
-        // is a `faculty_profiles` row whose `id` is the profile id, while its
-        // `user_id` (`f.user_id`) is the teacher identity. The room, section
-        // and subject rules compare the parent entity ids, which line up with
-        // the `activeInSemester` rows (`room_id`, `section_id`, `subject_id`),
-        // so only the faculty rule needs the `user_id` alias.
-        $candidateFaculty = (int) ($candidate['faculty']['user_id'] ?? 0);
+        // The faculty rule compares `schedules.faculty_id`, which points at a
+        // `faculty_profiles` row. Comparing it with the *user* id (f.user_id)
+        // silently matched nothing, so two classes for the same teacher were
+        // never reported. Room, section and subject use the same pattern.
+        $candidateFaculty = (int) ($candidate['faculty']['id'] ?? 0);
         $candidateSection = (int) ($candidate['section']['id'] ?? 0);
         $candidateSubject = (int) ($candidate['subject']['id'] ?? 0);
         $candidateSemester = (int) $candidate['semester']['id'];
@@ -672,6 +679,28 @@ final class ConflictService
         }
 
         return $gaps;
+    }
+
+    /**
+     * Whether one stored meeting occupies the given weekday of the given term.
+     *
+     * Used by the room-alternative search: a room is unavailable when any live
+     * meeting in the term already sits on that weekday. Cancelled entries free
+     * their room again.
+     *
+     * @param array<string, mixed> $meeting
+     */
+    private function meetingConflictsInSlot(array $meeting, int $semesterId, int $weekday): bool
+    {
+        if ((int) ($meeting['semester_id'] ?? 0) !== $semesterId) {
+            return false;
+        }
+
+        if ((string) ($meeting['status'] ?? '') === 'cancelled') {
+            return false;
+        }
+
+        return (int) ($meeting['day_of_week'] ?? 0) === $weekday;
     }
 
     /**

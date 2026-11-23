@@ -65,8 +65,9 @@ abstract class MasterDataController extends Controller
     /**
      * @return array<string, mixed>
      */
-    protected function actor(Request $request): array
+    protected function actor(?Request $request = null): array
     {
+        $request ??= $this->request;
         $user = $request->attribute('auth_user');
 
         if (!is_array($user)) {

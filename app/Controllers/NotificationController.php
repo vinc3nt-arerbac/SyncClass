@@ -47,16 +47,16 @@ final class NotificationController extends Controller
         $perPage = max(10, min(200, (int) $request->query('per_page', 50)));
 
         $result = $this->service->listForUser($user['id'], $perPage, $page);
-        $unread = $this->service->countUnread($user['id']);
+        $unread = $result['unread'];
 
         return $this->view('notifications/index', [
             'title' => 'Notifications',
             'rows' => $result['rows'],
             'total' => $result['total'],
             'unread' => $unread,
-            'page' => $page,
-            'per_page' => $perPage,
-            'last_page' => max(1, (int) ceil($result['total'] / $perPage)),
+            'page' => $result['page'],
+            'per_page' => $result['per_page'],
+            'last_page' => $result['last_page'],
             'notice' => $this->notice($request),
             'csrf_meta' => $this->csrfMeta(),
         ]);
@@ -76,7 +76,7 @@ final class NotificationController extends Controller
     public function markReadAll(Request $request): Response
     {
         $user = $this->actor($request);
-        $this->service->markRead($user['id'], '9999-12-31 23:59:59');
+        $this->service->markReadAll($user['id']);
 
         return Response::redirect(
             $this->router->url('notifications.index') . '?saved=read-all',
@@ -87,7 +87,7 @@ final class NotificationController extends Controller
     public function destroy(Request $request, string $id): Response
     {
         $user = $this->actor($request);
-        $this->service->deleteForUser($user['id'], (int) $id);
+        $this->service->delete((int) $id, $user['id']);
 
         return Response::redirect(
             $this->router->url('notifications.index') . '?saved=deleted',
@@ -104,7 +104,6 @@ final class NotificationController extends Controller
         $user = $this->actor($request);
 
         $rows = $this->service->listForUser($user['id'], 5, 1)['rows'];
-        $unread = $this->service->countUnread($user['id']);
 
         return $this->view('notifications/summary', [
             'title' => 'Your notifications',
@@ -122,8 +121,9 @@ final class NotificationController extends Controller
             : null;
     }
 
-    private function actor(Request $request): array
+    protected function actor(?Request $request = null): array
     {
+        $request ??= $this->request;
         $user = $request->attribute('auth_user');
 
         if (!is_array($user) || (int) ($user['id'] ?? 0) <= 0) {

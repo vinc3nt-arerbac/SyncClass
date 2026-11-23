@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Repositories\DepartmentRepository;
+use App\Repositories\FacultyRepository;
+use App\Repositories\RoomRepository;
 use App\Repositories\ScheduleRepository;
+use App\Repositories\SectionRepository;
+use App\Repositories\SemesterRepository;
+use App\Repositories\SubjectRepository;
 
 /**
  * Calendar query and presentation (CAL-01…CAL-05).
@@ -83,18 +89,20 @@ final class CalendarService
     {
         $start = $query['start'] ?? '';
         $end = $query['end'] ?? '';
-        $semesterId = $query['semester_id'] ?? null;
-        $departmentId = $query['department_id'] ?? null;
+        // Query strings arrive as strings; the repository's typed signature
+        // demands ints (or null for "every term"), so normalise once here.
+        $semesterId = (int) ($query['semester_id'] ?? 0);
+        $departmentId = (int) ($query['department_id'] ?? 0);
 
         if ($start === '' || $end === '') {
             return ['events' => [], 'total' => 0];
         }
 
         $rows = $this->schedules->calendarFeed(
-            $start,
-            $end,
-            $semesterId,
-            $departmentId,
+            (string) $start,
+            (string) $end,
+            $semesterId > 0 ? $semesterId : null,
+            $departmentId > 0 ? $departmentId : null,
             $authUser
         );
 
@@ -116,6 +124,9 @@ final class CalendarService
         // Weekly entries: the schedule row stores no meeting date, so the
         // calendar pins them to the weekday the range feed resolved in
         // PHP (the week that contains the range start).
+        // The repository resolves the concrete date of this occurrence, because
+        // a weekly meeting repeats and each repeat needs its own date.
+        $date = (string) ($row['occurrence_date'] ?? $meetingDate ?? '');
         $start = $row['start_time'];
         $end = $row['end_time'];
 
@@ -128,9 +139,9 @@ final class CalendarService
         return [
             'id' => (int) $row['id'],
             'title' => $row['subject_code'] . ' · ' . $row['section_code'],
-            'start' => $meetingDate,
-            'end' => $meetingDate,
-            'allDay' => $isOneOff,
+            'start' => $date === '' ? null : $date . 'T' . $start,
+            'end' => $date === '' ? null : $date . 'T' . $end,
+            'allDay' => false,
             'section_code' => (string) $row['section_code'],
             'subject_code' => (string) $row['subject_code'],
             'subject_title' => (string) $row['subject_title'],

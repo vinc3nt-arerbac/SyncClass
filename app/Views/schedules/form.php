@@ -260,7 +260,13 @@ $disabled = $can_edit ? '' : 'disabled';
                         a.className = 'list-row';
                         a.href = '<?= $e($route('schedules.edit', ['id' => $schedule['id'] ?? 0])) ?>';
                         a.dataset.room = String(room.room_id);
-                        a.innerHTML = '<strong><?= $e($room['code'] ? $room['code'] . ' · ' . $room['room_type'] . ' · ' . $room['capacity'] . ' seats' : '') ?></strong>';
+                        // `room` here is the JavaScript loop variable, so the
+                        // label is composed in the browser: interpolating a PHP
+                        // variable would print whatever $room the view happened
+                        // to define (nothing, on this page).
+                        a.textContent = room.code
+                            ? room.code + ' · ' + room.room_type + ' · ' + room.capacity + ' seats'
+                            : '';
                         row.appendChild(a);
                     });
                     preview.appendChild(row);

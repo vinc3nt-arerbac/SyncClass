@@ -144,13 +144,9 @@ $modules = [
     'reports' => [
         'label' => 'Reports & exports',
         'permissions' => [
-
-        'label' => 'Change requests',
-        'permissions' => [
-            'requests.view' => 'View schedule change requests',
-            'requests.create' => 'File a schedule change request',
-            'requests.update' => 'Edit or cancel own change requests',
-            'requests.approve' => 'Approve or reject change requests',
+            'reports.view' => 'View reports',
+            'reports.export' => 'Export reports for the user\'s own scope',
+            'reports.export.all' => 'Export reports for the whole institution',
         ],
     ],
     'conflicts' => [
@@ -164,14 +160,6 @@ $modules = [
         'permissions' => [
             'generator.run' => 'Run the timetable generator',
             'generator.approve' => 'Accept a generated draft timetable',
-        ],
-    ],
-    'reports' => [
-        'label' => 'Reports & exports',
-        'permissions' => [
-            'reports.view' => 'View reports',
-            'reports.export' => 'Export reports for the user\'s own scope',
-            'reports.export.all' => 'Export reports for the whole institution',
         ],
     ],
     'notifications' => [

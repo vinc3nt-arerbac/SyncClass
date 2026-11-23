@@ -24,6 +24,13 @@
 !/public/assets/uploads/.gitkeep
 !/public/assets/uploads/.htaccess
 
+# Local release/build archives — never part of the repository
+*.zip
+*.7z
+
+# Ad-hoc verification output
+/.tmp-verify/
+
 # Tooling artefacts
 composer.phar
 *.log

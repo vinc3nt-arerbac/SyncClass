@@ -291,7 +291,15 @@ final class ScheduleService
      *     notes: string|null
      * }
      */
-    private function resolve(Scope $scope, array $data): array
+    /**
+     * Resolve one form payload into the facts the write path and the conflict
+     * engine both use (existing relations, normalised times, weekdays).
+     *
+     * Public because the conflict-preview endpoint evaluates a candidate with
+     * the same resolver as create()/update(): one definition of "what this form
+     * means", so the preview can never disagree with the save.
+     */
+    public function resolve(Scope $scope, array $data): array
     {
         $semester = $this->terms->findSemester((int) ($data['semester_id'] ?? 0));
 
@@ -366,6 +374,23 @@ final class ScheduleService
             'meeting_date' => $meetingDate,
             'recurrence' => $recurrence,
             'notes' => $this->notes($data['notes'] ?? null),
+
+            // ConflictService reasons about a candidate the same way it reasons
+            // about a stored meeting row: it labels the room, teacher, section
+            // and subject from flat columns. The resolved relations above stay
+            // available for the rules that need whole records (semester status,
+            // section department), so both shapes are published here instead of
+            // making the service guess which one it was handed.
+            'subject_code' => (string) $subject['code'],
+            'subject_title' => (string) $subject['title'],
+            'section_code' => (string) $section['code'],
+            'student_count' => (int) $section['student_count'],
+            'room_code' => (string) $room['code'],
+            'room_capacity' => (int) $room['capacity'],
+            'room_type' => (string) $room['room_type'],
+            'faculty_first_name' => (string) $faculty['first_name'],
+            'faculty_last_name' => (string) $faculty['last_name'],
+            'department_id' => (int) $section['department_id'],
         ];
     }
 

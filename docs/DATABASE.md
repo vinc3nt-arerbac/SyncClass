@@ -321,15 +321,16 @@ Retention is 30 days (cron prune).
 | `end_date` | DATE | no | — | CHECK after `start_date` |
 | `status` | ENUM(`planned`,`active`,`closed`) | no | `planned` | IDX |
 | `is_current` | TINYINT(1) | no | 0 | BR-14 |
-| `current_academic_year_id` | INT UNSIGNED GENERATED STORED | yes | computed | `IF(is_current = 1, academic_year_id, NULL)` |
 | `created_at`, `updated_at` | DATETIME | no | now | |
 
-**Keys:** PK `id`; UK `uq_semesters_code`, `uq_semesters_year_term (academic_year_id, term_no)`, `uq_semesters_one_current (current_academic_year_id)`; IDX `idx_semesters_status`, `idx_semesters_dates`.
-**Rules:** The generated column is the storage-level guard for BR-14: at most
-one `is_current` semester per academic year, because non-current rows compute
-`NULL` and MySQL permits many NULLs in a unique key. The service additionally
-ensures only one semester is current across the institution and returns a
-friendly validation error before the duplicate-key error can surface.
+**Keys:** PK `id`; UK `uq_semesters_code`, `uq_semesters_year_term (academic_year_id, term_no)`; IDX `idx_semesters_status`, `idx_semesters_dates`.
+**Rules:** BR-14 (at most one `is_current` semester per academic year, and only
+one current semester institution-wide) is enforced by `TermRepository`: it
+clears the previous flag inside the same transaction that sets the new one and
+returns a friendly validation error. There is no generated column doing this at
+the storage layer because MariaDB — the server bundled with XAMPP — refuses a
+generated column that projects a foreign-key column, so the schema must stay
+portable between MySQL 8 and MariaDB 10.4+.
 
 ### 5.12 `time_slots`
 

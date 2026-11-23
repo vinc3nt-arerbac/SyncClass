@@ -19,7 +19,7 @@ $bool = static fn (string $key, bool $default): bool => filter_var(
 return [
     'name' => getenv('APP_NAME') ?: 'SyncClass',
     'institution' => getenv('APP_INSTITUTION') ?: 'Santa Ana College',
-    'version' => '1.0.0-dev',
+    'version' => '1.0.0',
     'env' => getenv('APP_ENV') ?: 'local',
     'debug' => $bool('APP_DEBUG', true),
     'url' => rtrim(getenv('APP_URL') ?: 'http://localhost/syncclass', '/'),

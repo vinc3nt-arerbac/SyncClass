@@ -238,9 +238,13 @@ CREATE TABLE IF NOT EXISTS rooms (
 -- Academic years, semesters (terms) and configurable time slots.
 -- Requirements: MD-06, BR-14, CNF-07 (policy windows).
 --
--- The generated column + unique key enforce "at most one current semester
--- per academic year" at the storage layer; the service still validates it
--- so the user gets a friendly message instead of a duplicate-key error.
+-- "At most one current semester per academic year" (BR-14) is enforced by
+-- TermRepository, which clears the previous flag inside the same transaction
+-- before the new one is written. It is deliberately *not* a generated column +
+-- unique key: MySQL 8 accepts that trick, but MariaDB (the server bundled with
+-- XAMPP) rejects a generated column that projects a foreign-key column
+-- (`academic_year_id`), so the schema would fail to import on a stock XAMPP.
+-- The portable schema must load on both engines.
 -- =====================================================================
 
 CREATE TABLE IF NOT EXISTS academic_years (
@@ -267,14 +271,11 @@ CREATE TABLE IF NOT EXISTS semesters (
     end_date                 DATE             NOT NULL,
     status                   ENUM('planned','active','closed') NOT NULL DEFAULT 'planned',
     is_current               TINYINT(1)       NOT NULL DEFAULT 0,
-    current_academic_year_id INT UNSIGNED
-        GENERATED ALWAYS AS (IF(is_current = 1, academic_year_id, NULL)) STORED,
     created_at               DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at               DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_semesters_code (code),
     UNIQUE KEY uq_semesters_year_term (academic_year_id, term_no),
-    UNIQUE KEY uq_semesters_one_current (current_academic_year_id),
     KEY idx_semesters_status (status),
     KEY idx_semesters_dates (start_date, end_date),
     CONSTRAINT fk_semesters_academic_year

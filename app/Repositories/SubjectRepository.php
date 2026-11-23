@@ -201,4 +201,75 @@ final class SubjectRepository extends MasterDataRepository
 
         return $value === '' ? null : $value;
     }
+
+    /**
+     * Subjects a section takes in a term, for the timetable generator.
+     *
+     * The curriculum table (`section_subjects`) is authoritative when it has
+     * rows. A school that has not entered a curriculum yet would otherwise get
+     * an empty draft on every run, so an empty result falls back to the active
+     * subjects of the section's own department — the catalogue is the demand.
+     *
+     * @param array<int, int|string> $subjectIds Optional extra filter.
+     * @return array<int, array<string, mixed>>
+     */
+    public function forSection(int $sectionId, int $semesterId, array $subjectIds = []): array
+    {
+        $section = $this->database->selectOne(
+            'SELECT id, department_id FROM sections WHERE id = :id LIMIT 1',
+            ['id' => $sectionId]
+        );
+
+        if ($section === null) {
+            return [];
+        }
+
+        $bindings = ['section_id' => $sectionId, 'semester_id' => $semesterId];
+        $filter = $this->subjectFilter($subjectIds, $bindings);
+
+        $curriculum = $this->database->select(
+            self::SELECT
+            . ' INNER JOIN section_subjects ss ON ss.subject_id = s.id'
+            . ' WHERE ss.section_id = :section_id AND ss.is_active = 1'
+            . ' AND (ss.semester_id = :semester_id OR ss.semester_id IS NULL)'
+            . ' AND s.is_active = 1' . $filter
+            . ' ORDER BY s.code',
+            $bindings
+        );
+
+        if ($curriculum !== []) {
+            return $curriculum;
+        }
+
+        $bindings = ['department_id' => (int) $section['department_id']];
+        $filter = $this->subjectFilter($subjectIds, $bindings);
+
+        return $this->database->select(
+            self::SELECT . ' WHERE s.department_id = :department_id AND s.is_active = 1' . $filter
+            . ' ORDER BY s.code',
+            $bindings
+        );
+    }
+
+    /**
+     * `AND s.id IN (…)` for an optional id list, extending the bindings.
+     *
+     * @param array<int, int|string> $subjectIds
+     * @param array<string, mixed>   $bindings
+     */
+    private function subjectFilter(array $subjectIds, array &$bindings): string
+    {
+        if ($subjectIds === []) {
+            return '';
+        }
+
+        $placeholders = [];
+        foreach (array_values($subjectIds) as $index => $subjectId) {
+            $key = 'subject_' . $index;
+            $placeholders[] = ':' . $key;
+            $bindings[$key] = (int) $subjectId;
+        }
+
+        return ' AND s.id IN (' . implode(', ', $placeholders) . ')';
+    }
 }

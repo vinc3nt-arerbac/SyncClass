@@ -66,6 +66,9 @@ final class Kernel
      * @param array<string, mixed> $config    Merged configuration from bootstrap.php.
      * @param string|null          $routesFile Overridable for tests.
      */
+    /** The kernel that served the current request, for controller helpers. */
+    private static ?self $current = null;
+
     public static function boot(array $config, ?string $routesFile = null): self
     {
         $configObject = new Config($config);
@@ -78,6 +81,7 @@ final class Kernel
 
         $kernel = new self($configObject, $container, $router);
         $kernel->registerBindings();
+        self::$current = $kernel;
         $kernel->registerMiddleware();
 
         $routesFile ??= BASE_PATH . '/routes/web.php';
@@ -156,6 +160,18 @@ final class Kernel
         return $this->container;
     }
 
+    /**
+     * The kernel booted for this process, if any.
+     *
+     * Used by the base controller for the few services that are not constructor
+     * dependencies (authorization, CSRF). Null in a plain CLI process that only
+     * loaded bootstrap.php.
+     */
+    public static function current(): ?self
+    {
+        return self::$current;
+    }
+
     public function router(): Router
     {
         return $this->router;
@@ -177,6 +193,12 @@ final class Kernel
     {
         $handler = $match->route()->handler();
         $parameters = array_values($match->parameters());
+
+        // Middleware hands the pipeline a *new* immutable Request carrying the
+        // attributes it added (auth_user, route_*, …). Rebind it here so a
+        // controller's constructor receives the authenticated request rather
+        // than the bare one captured at boot.
+        $this->container->instance(Request::class, $request);
 
         // Layouts render the signed-in user; null for public pages.
         $this->container->get(View::class)->share('auth_user', $request->attribute('auth_user'));
