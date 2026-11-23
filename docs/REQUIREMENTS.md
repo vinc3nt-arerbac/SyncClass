@@ -395,7 +395,36 @@ Phase 1 is complete when a reviewer can confirm:
 - `database/schema/SyncClass.sql` — `GEN-02` demand input is already the
   `section_subjects` table (subjects × sections); the generator reads it.
 
+**Phase 14 — Notifications (NTF-01…04)**
+
+| ID | Requirement | Status |
+|---|---|---|
+| NTF-01 | In-app notification centre with unread count, mark-as-read, mark-all-read | done |
+| NTF-02 | Email notifications via PHPMailer (SMTP configurable), respecting per-user preferences | done |
+| NTF-03 | Notifications are queued and dispatched by a cron-safe worker so a slow SMTP server never blocks a request | done |
+| NTF-04 | Notifications are delivered only to the user they concern | done |
+
+**Files created** (Phase 14):
+
+- `app/Services/NotificationService.php` — the notification hub: delivery, scoped inbox reads, summary, audit, CLI dispatch.
+- `app/Repositories/NotificationRepository.php` — SQL for the in-app table, the email queue, and the pending drain.
+- `app/Services/Mailer.php` — PHPMailer wrapper; optional SMTP, per-row idempotency.
+- `app/Controllers/NotificationController.php` — `GET /notifications`, `POST /notifications/mark-as-read`, `POST /notifications/read-all`, `POST /notifications/{id}/delete`.
+- `app/Views/notifications/index.php`, `app/Views/notifications/summary.php` — the inbox and the dashboard widget.
+- `bin/dispatch-notifications.php` — CLI worker that drains `email_status = pending`.
+- `routes/web.php` — Phase 14 routes (web.php only; api.php owns REST endpoints).
+- `docs/ARCHITECTURE.md`, `docs/REQUIREMENTS.md` — Phase 14 status.
+
 **Testing procedure** (to be run on the local XAMPP installation):
+
+```bash
+cd /workspace/chats/e3c32778e44f5cc31faf9e26
+php bin/dispatch-notifications.php
+```
+
+Verifies the queue drain and record updates. The same test suite also touches the in-app inbox.
+
+**Next phase** — Phase 15: Reports + exports (RPT-01…07).
 
 ```bash
 cd /workspace/chats/e3c32778e44f5cc31faf9e26

@@ -263,4 +263,20 @@ return static function (Router $router, Container $container): void {
     // -----------------------------------------------------------------------
     // End of Phase 12–13 routes.
     // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+    // Phase 14: Notifications (NTF-01…NTF-04).
+    // -----------------------------------------------------------------------
+    $router->get('/notifications', [NotificationController::class, 'index'], ['auth', 'permission:notifications.view'], 'Notifications')
+        ->name('notifications.index');
+    $router->get('/notifications/{id}', [NotificationController::class, 'markAsRead'], ['auth', 'permission:notifications.view'], 'Mark notification read')
+        ->name('notifications.mark-as-read');
+    $router->post('/notifications/read-all', [NotificationController::class, 'markReadAll'], ['auth', 'permission:notifications.view'], 'Mark all notifications read')
+        ->name('notifications.mark-read-all');
+    $router->post('/notifications/{id}/delete', [NotificationController::class, 'destroy'], ['auth', 'permission:notifications.view'], 'Delete notification')
+        ->name('notifications.destroy');
+
+    // -----------------------------------------------------------------------
+    // End of Phase 14 routes.
+    // -----------------------------------------------------------------------
 };
