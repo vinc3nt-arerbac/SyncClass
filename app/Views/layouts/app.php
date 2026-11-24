@@ -43,6 +43,14 @@ $authUser = $auth_user ?? null;
             <a href="<?= $e($route('schedules.index')) ?>">Schedules</a>
         <?php endif; ?>
 
+        <?php if (is_array($authUser) && $can('schedules.view')): ?>
+            <a href="<?= $e($route('calendar.index')) ?>">Calendar</a>
+        <?php endif; ?>
+
+        <?php if (is_array($authUser) && $can('reports.view')): ?>
+            <a href="<?= $e($route('reports.index')) ?>">Reports</a>
+        <?php endif; ?>
+
         <?php if (is_array($authUser) && $can('departments.view')): ?>
             <a href="<?= $e($route('master.departments.index')) ?>">Master data</a>
         <?php endif; ?>

@@ -1144,3 +1144,100 @@ tbody tr:hover {
 .status-published { background: rgb(31 122 77 / 20%); color: #0f4726; }
 .status-rejected { background: #fdecea; color: #8c2318; }
 .status-cancelled { background: rgb(43 33 24 / 10%); color: #6b5b4b; text-decoration: line-through; }
+
+/* ---------------------------------------------------------------------------
+   Reports (Phase 15) — load/utilisation bands and the weekly board.
+   Bands reuse the status palette so "over" reads like "rejected" and "high"
+   like "published"; the numbers are always printed next to the colour, so the
+   colour is reinforcement, not the only signal.
+   --------------------------------------------------------------------------- */
+.band-over { background: #fdecea; color: #8c2318; }
+.band-under { background: #fdf4dd; color: #8a6100; }
+.band-balanced { background: rgb(31 122 77 / 12%); color: #17603a; }
+.band-high { background: rgb(31 122 77 / 20%); color: #0f4726; }
+.band-low { background: rgb(107 91 75 / 12%); color: var(--muted); }
+
+.timetable td {
+    vertical-align: top;
+    min-width: 9rem;
+}
+
+.timetable th.lane {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.slot {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    margin-bottom: 0.35rem;
+    padding: 0.35rem 0.45rem;
+    border-left: 3px solid var(--gold, #b8860b);
+    border-radius: 0.35rem;
+    background: var(--canvas);
+    font-size: 0.85rem;
+    line-height: 1.25;
+}
+
+.slot:last-child {
+    margin-bottom: 0;
+}
+
+/* Print-friendly output for every report (RPT-06): the chrome disappears, the
+   tables keep their borders, and a page break is forced between the tables of
+   a single report so a printed sheet does not split a row. */
+@media print {
+    .topbar,
+    .footer,
+    .subnav,
+    .no-print,
+    .hero .badges {
+        display: none !important;
+    }
+
+    body {
+        background: #fff;
+        color: #000;
+    }
+
+    .shell {
+        max-width: none;
+        padding: 0;
+    }
+
+    .card {
+        border: 1px solid #999;
+        box-shadow: none;
+        page-break-inside: avoid;
+    }
+
+    .card + .card {
+        page-break-before: auto;
+    }
+
+    .table-wrap {
+        overflow: visible;
+        border: 0;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10pt;
+    }
+
+    th,
+    td {
+        border: 1px solid #999;
+        padding: 0.25rem 0.35rem;
+    }
+
+    thead {
+        display: table-header-group;
+    }
+
+    a[href]::after {
+        content: '';
+    }
+}

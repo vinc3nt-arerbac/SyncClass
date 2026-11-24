@@ -44,6 +44,7 @@ use App\Controllers\MasterData\SemesterController;
 use App\Controllers\MasterData\SubjectController;
 use App\Controllers\NotificationController;
 use App\Controllers\PipelineController;
+use App\Controllers\ReportsController;
 use App\Controllers\Scheduling\ScheduleController;
 use App\Controllers\Generator\GeneratorController;
 use App\Controllers\UserDirectoryController;
@@ -273,5 +274,26 @@ return static function (Router $router, Container $container): void {
         ->name('notifications.mark-read-all');
     $router->post('/notifications/{id}/delete', [NotificationController::class, 'destroy'], ['auth', 'permission:notifications.view'], 'Delete notification')
         ->name('notifications.destroy');
+
+    // -----------------------------------------------------------------------
+    // Phase 15: Reports (RPT-01…RPT-07).
+    // Read-only, so every route is a GET and the global CSRF middleware has
+    // nothing to police here. `reports.view` is the gate; the department/self
+    // scope is applied by ReportRepository in SQL, and the query parameters
+    // (`semester`, `faculty`, `department`, `section`, `status`) can only
+    // narrow what the scope already allows.
+    // -----------------------------------------------------------------------
+    $router->get('/reports', [ReportsController::class, 'index'], ['auth', 'permission:reports.view'], 'Reports hub')
+        ->name('reports.index');
+    $router->get('/reports/faculty-load', [ReportsController::class, 'facultyLoad'], ['auth', 'permission:reports.view'], 'Faculty load report (RPT-01)')
+        ->name('reports.faculty-load');
+    $router->get('/reports/rooms', [ReportsController::class, 'rooms'], ['auth', 'permission:reports.view'], 'Room utilization report (RPT-02)')
+        ->name('reports.rooms');
+    $router->get('/reports/departments', [ReportsController::class, 'departmentSchedule'], ['auth', 'permission:reports.view'], 'Department schedule report (RPT-03)')
+        ->name('reports.departments');
+    $router->get('/reports/conflicts', [ReportsController::class, 'conflicts'], ['auth', 'permission:reports.view'], 'Conflict report (RPT-04)')
+        ->name('reports.conflicts');
+    $router->get('/reports/timetable', [ReportsController::class, 'timetable'], ['auth', 'permission:reports.view'], 'Weekly and semester timetable (RPT-03/RPT-05)')
+        ->name('reports.timetable');
 
 };

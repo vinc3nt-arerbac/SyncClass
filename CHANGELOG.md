@@ -4,6 +4,42 @@ All notable changes to SyncClass are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] — 2026-11-24
+
+Adds the reporting module (RPT-01…RPT-05): five read-only reports and a
+print-friendly timetable, each scoped to the signed-in user's role.
+
+### Added
+- `App\Repositories\ReportRepository` — one scoped read model per report
+  (faculty load, room utilization, department schedule, conflict log,
+  timetable/semester board, hub summary). Scope is applied in SQL: the
+  administrator sees the institution, a dean or secretary their department,
+  faculty only their own meetings. Cancelled meetings are excluded.
+- `App\Services\ReportService` — term context (requested term when visible,
+  otherwise the current one), derived numbers and bands (over/under-loaded,
+  low/high utilization, 60 %/100 % and 40 %/75 % thresholds), and the weekly
+  grid. Room utilization expands weekly meetings across the term's teaching
+  weeks and counts one-offs once, so the percentage is comparable between
+  terms of different lengths.
+- `App\Controllers\ReportsController` — six GET actions with `?semester=`,
+  `?faculty=`, `?department=` and `?section=` filters; filters only narrow the
+  scope and never widen it.
+- Report views under `app/Views/reports/` — hub, faculty load, room
+  utilization (per room and per building), department schedule, conflict
+  report and weekly/semester timetable; plus shared sub-navigation and
+  print stylesheet rules (`@media print`, `.band-*`, `.timetable`, `.slot`).
+- Routes `/reports`, `/reports/faculty-load`, `/reports/rooms`,
+  `/reports/departments`, `/reports/conflicts` and `/reports/timetable`,
+  gated by `reports.view`; Reports and Calendar links added to the main nav.
+- `tests/reports_test.php` — 98 checks: scope isolation across all four roles,
+  exact room-utilization math against a known four-week term, the empty-term
+  case, unknown-term fallback, cancelled-meeting handling and HTTP rendering.
+
+### Known limitations
+- RPT-06 PDF/Excel export is not implemented: the reports are print-friendly
+  (`window.print()` / `@media print`) but there are no DomPDF or PHPSpreadsheet
+  downloads, since neither library is installed.
+
 ## [1.0.0] — 2026-11-23
 
 First installable release: authentication, master data, scheduling with
