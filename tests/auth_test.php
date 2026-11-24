@@ -34,6 +34,8 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 /** @var array<string, mixed> $config */
 $config = require dirname(__DIR__) . '/bootstrap.php';
 require __DIR__ . '/support/auth_schema.php';
+require __DIR__ . '/support/master_schema.php';
+require __DIR__ . '/support/schedule_schema.php';
 
 /** @var array<int, array{label: string, passed: bool, detail: string}> $checks */
 $checks = [];
@@ -228,6 +230,10 @@ $kernelConfig['app']['session']['name'] = 'syncclass_auth_http_test';
 $kernel = Kernel::boot($kernelConfig);
 $kernelDatabase = $kernel->container()->get(Database::class);
 auth_schema($kernelDatabase);
+// The landing page is the Phase 16 dashboard, which reads the timetable, so
+// the kernel database needs the master-data and schedule mirrors too.
+master_schema($kernelDatabase);
+schedule_schema($kernelDatabase);
 
 $adminId = auth_create_user($kernelDatabase, [
     'email' => 'admin@sac.edu.ph',

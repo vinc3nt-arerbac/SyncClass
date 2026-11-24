@@ -242,6 +242,9 @@ final class TimetableGenerator
                         'room_id' => $roomId,
                         'faculty_id' => $facultyId,
                         'semester_id' => $semesterId,
+                        // Carried so the draft's utilization metric reports the
+                        // demand's weekly load rather than zero (GEN-06).
+                        'weekly_hours' => (float) $demand['weekly_hours'],
                     ];
                 }
             }
@@ -437,17 +440,75 @@ final class TimetableGenerator
         return ['conflict' => 'CNF-01/02', 'message' => 'time overlap'];
     }
 
+    /**
+     * Feasibility of the partial assignment, evaluated by the same conflict
+     * engine the form and calendar use (CNF-01…CNF-11).
+     *
+     * The generator stores a placement as minutes since midnight and keeps the
+     * section/subject in the demand table, so the candidate is assembled from
+     * both before it is handed to ConflictService::check(). The assignment's
+     * own rows are removed from the comparison set, exactly as
+     * ScheduleService::update() removes the row it is editing.
+     */
     private function conflictCheck(array $assignments, array $demandTable): ?array
     {
+        /** @var array<string, array<string, mixed>> $rows */
         $rows = [];
-        foreach ($assignments as $index => $p) {
-            $rows[] = $this->rowFrom($p, (int) $index);
+
+        foreach ($assignments as $index => $placement) {
+            $rows[(string) $index] = $this->rowFrom($placement, (int) $index);
         }
 
-        $signature = implode(',', array_map(static fn (array $r): string => (string) ($r['id'] ?? ''), $rows));
-        $hasConflict = $this->conflict->has($signature);
+        $existing = array_values($rows);
 
-        return $hasConflict === true ? ['conflict' => 'CNF-01/02/03', 'message' => 'tyre double-booked'] : null;
+        foreach ($assignments as $index => $placement) {
+            $key = (string) $index;
+            $row = $rows[$key];
+            $demand = $demandTable[(int) $index] ?? [];
+
+            $others = array_values(array_filter(
+                $existing,
+                static fn (array $other): bool => (int) $other['id'] !== (int) $row['id']
+            ));
+
+            $candidate = [
+                'semester' => ['id' => (int) $row['semester_id']],
+                'section' => [
+                    'id' => (int) ($demand['section_id'] ?? $row['section_id']),
+                    'code' => (string) ($demand['section_code'] ?? 'section'),
+                    'name' => (string) ($demand['section_name'] ?? 'section'),
+                    'student_count' => (int) ($demand['student_count'] ?? 0),
+                ],
+                'subject' => [
+                    'id' => (int) ($demand['subject_id'] ?? $row['subject_id']),
+                    'code' => (string) ($demand['subject_code'] ?? 'subject'),
+                    'title' => (string) ($demand['subject_title'] ?? 'subject'),
+                ],
+                'faculty' => ['id' => (int) $row['faculty_id']],
+                'room' => ['id' => (int) $row['room_id'], 'code' => 'room', 'capacity' => 0, 'room_type' => 'lecture'],
+                'days' => [(int) $row['day_of_week']],
+                'start_time' => (string) $row['start_time'],
+                'end_time' => (string) $row['end_time'],
+                'meeting_date' => null,
+                'subject_code' => (string) ($demand['subject_code'] ?? 'subject'),
+                'subject_title' => (string) ($demand['subject_title'] ?? 'subject'),
+                'section_code' => (string) ($demand['section_code'] ?? 'section'),
+                'student_count' => (int) ($demand['student_count'] ?? 0),
+                'room_code' => 'room',
+                'room_capacity' => 0,
+                'faculty_first_name' => 'Faculty',
+                'faculty_last_name' => 'member',
+                'department_id' => (int) ($demand['department_id'] ?? 0),
+            ];
+
+            $result = $this->conflict->check($candidate, $others);
+
+            if ($result['status'] === 'conflict') {
+                return $result['errors'][0] ?? ['conflict' => 'CNF-01/02/03', 'message' => 'conflicting placement'];
+            }
+        }
+
+        return null;
     }
 
     /** @param array<string, array<string, mixed>> $assignments */
@@ -462,9 +523,21 @@ final class TimetableGenerator
             'faculty_id' => $p['faculty_id'] ?? 0,
             'room_id' => $p['room_id'] ?? 0,
             'day_of_week' => $p['day'] ?? 0,
-            'start_time' => $p['start'] ?? '00:00',
-            'end_time' => $p['end'] ?? '00:00',
+            // Placements carry minutes since midnight for cheap arithmetic;
+            // the conflict engine's contract is `HH:MM:SS`.
+            'start_time' => $this->timeLabel((int) ($p['start'] ?? 0)),
+            'end_time' => $this->timeLabel((int) ($p['end'] ?? 0)),
         ];
+    }
+
+    /**
+     * Minutes since midnight → `HH:MM:SS` as the conflict engine expects.
+     */
+    private function timeLabel(int $minutes): string
+    {
+        $minutes = max(0, min(24 * 60, $minutes));
+
+        return sprintf('%02d:%02d:00', intdiv($minutes, 60), $minutes % 60);
     }
 
     private function assign(array &$assignments, array &$assigned, int $index, array $placement): void

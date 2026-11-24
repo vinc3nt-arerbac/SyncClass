@@ -467,8 +467,14 @@ $kernel = Kernel::boot($kernelConfig);
 $kernelView = $kernel->container()->get(View::class);
 
 require __DIR__ . '/support/auth_schema.php';
+require __DIR__ . '/support/master_schema.php';
+require __DIR__ . '/support/schedule_schema.php';
 $kernelDatabase = $kernel->container()->get(Database::class);
 auth_schema($kernelDatabase);
+// Phase 16: `/` is the dashboard, so the kernel database also needs the
+// master-data and schedule mirrors the dashboard reads.
+master_schema($kernelDatabase);
+schedule_schema($kernelDatabase);
 $kernelUserId = auth_create_user($kernelDatabase, [
     'email' => 'core.tester@sac.edu.ph',
     'first_name' => 'Core',
@@ -484,7 +490,8 @@ $kernel->container()->get(Session::class)->set(AuthService::SESSION_KEY, $kernel
 
 $home = $kernel->handle(new Request('GET', '/'));
 check('GET / is served by the routed home page', $home->status() === 200 && str_contains($home->body(), 'Welcome back, Core'));
-check('home page renders the route table', str_contains($home->body(), 'pipeline.echo') && str_contains($home->body(), '/health'));
+check('home page renders the dashboard widgets and chart endpoint', str_contains($home->body(), 'stat-grid')
+    && str_contains($home->body(), 'data-dashboard-endpoint'));
 check('rendered pages carry security headers', $home->header('X-Content-Type-Options') === 'nosniff'
     && str_contains((string) $home->header('Content-Security-Policy'), 'nonce-')
     && str_contains((string) $home->header('Content-Security-Policy'), "frame-ancestors 'self'"));

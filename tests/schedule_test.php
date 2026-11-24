@@ -202,7 +202,8 @@ check('a one-off meeting is one row', count($oneOffIds) === 1);
 check('a one-off derives its weekday from the date', (int) $database->scalar('SELECT day_of_week FROM schedules WHERE id = :id', ['id' => $oneOffIds[0]]) === 3);
 check('the meeting date is stored', (string) $database->scalar('SELECT meeting_date FROM schedules WHERE id = :id', ['id' => $oneOffIds[0]]) === '2026-09-02');
 
-$colleagueIds = $service->create($adminScope, $meeting(['faculty_id' => $profileCas2, 'days' => [4], 'start_time' => '16:00', 'end_time' => '17:00']), $admin);
+// Friday, so the Thursday 15:00–16:30 HTTP fixture below stays free.
+$colleagueIds = $service->create($adminScope, $meeting(['faculty_id' => $profileCas2, 'days' => [5], 'start_time' => '16:00', 'end_time' => '17:00']), $admin);
 $cbaIds = $service->create($adminScope, $meeting([
     'section_id' => $sectionCba,
     'subject_id' => $subjectCba,
@@ -420,20 +421,21 @@ $overlapCandidate = $meeting([
     'notes' => 'pretest overlap',
 ]);
 
-// Adjacent times: 09:00-10:00 and 10:00-11:00 are allowed (touching).
+// Adjacent times: the existing 09:00–10:30 class and 10:30–11:30 are allowed
+// (half-open intervals, touching bounds).
 $contiguousCandidate = $meeting([
     'room_id' => $lectureRoom,
-    'faculty_id' => $facultyCas2Id,
+    'faculty_id' => $profileCas2,
     'days' => [1],
-    'start_time' => '10:00',
-    'end_time' => '11:00',
+    'start_time' => '10:30',
+    'end_time' => '11:30',
     'notes' => 'pretest contiguity',
 ]);
 
 // BR-02 room conflict on the same weekday.
 $roomConflictCandidate = $meeting([
     'room_id' => $lectureRoom,
-    'faculty_id' => $facultyCas2Id,
+    'faculty_id' => $profileCas2,
     'days' => [1],
     'start_time' => '09:00',
     'end_time' => '10:30',
@@ -443,7 +445,7 @@ $roomConflictCandidate = $meeting([
 // BR-03 faculty conflict, same teacher, same weekday.
 $facultyConflictCandidate = $meeting([
     'room_id' => $otherRoom,
-    'faculty_id' => $facultyCas,
+    'faculty_id' => $profileCas,
     'days' => [1],
     'start_time' => '09:00',
     'end_time' => '10:00',
@@ -455,7 +457,7 @@ $sectionConflictCandidate = $meeting([
     'room_id' => $otherRoom,
     'section_id' => $sectionCas,
     'subject_id' => $subjectCas,
-    'faculty_id' => $facultyCas2Id,
+    'faculty_id' => $profileCas2,
     'days' => [1],
     'start_time' => '09:00',
     'end_time' => '10:00',
@@ -466,7 +468,7 @@ $sectionConflictCandidate = $meeting([
 $subjectConflictCandidate = $meeting([
     'room_id' => $lectureRoom,
     'subject_id' => $subjectCas,
-    'faculty_id' => $facultyCas2Id,
+    'faculty_id' => $profileCas2,
     'days' => [1],
     'start_time' => '09:00',
     'end_time' => '10:00',
@@ -477,7 +479,7 @@ $subjectConflictCandidate = $meeting([
 $departmentConflictCandidate = $meeting([
     'section_id' => $sectionCba,
     'subject_id' => $subjectCas,
-    'faculty_id' => $facultyCas,
+    'faculty_id' => $profileCas,
     'room_id' => $lectureRoom,
     'days' => [1],
     'start_time' => '09:00',
@@ -491,7 +493,7 @@ $oneOffConflictCandidate = $meeting([
     'meeting_date' => '2026-09-02',
     'days' => [],
     'room_id' => $lectureRoom,
-    'faculty_id' => $facultyCas2Id,
+    'faculty_id' => $profileCas2,
     'start_time' => '13:00',
     'end_time' => '15:00',
     'notes' => 'pretest one-off clash',
@@ -502,15 +504,30 @@ $oneOffConflictCandidate = $meeting([
 // this candidate is a clean laboratory in a laboratory room.
 $labRoom = $rooms->create(['building_id' => $building, 'code' => '105', 'room_type' => 'laboratory', 'capacity' => 30]);
 
+// The suite cancelled the first fixture in the lifecycle block, so the
+// conflict rules need a live Monday 09:00–10:30 reference row of their own.
+$referenceIds = $service->create($adminScope, $meeting([
+    'room_id' => $lectureRoom,
+    'faculty_id' => $profileCas,
+    'days' => [1],
+    'start_time' => '09:00',
+    'end_time' => '10:30',
+    'notes' => 'phase 11 reference row',
+]), $admin);
+
+// A second free lecture room with room for the 42-student section, so the
+// suggestion engine has a real alternative to offer (104 seats 40).
+$rooms->create(['building_id' => $building, 'code' => '106', 'room_type' => 'lecture', 'capacity' => 45]);
+
 // Valid entries must pass every rule: an approved-time, active-room entry in
 // a free slot with no clash.
 $validCandidateWeekday = (int) $meeting()['days'][0];
 $validCandidate = $meeting([
     'room_id' => $otherRoom,
-    'faculty_id' => $facultyCas2Id,
+    'faculty_id' => $profileCas2,
     'days' => [$validCandidateWeekday],
-    'start_time' => '11:00',
-    'end_time' => '12:00',
+    'start_time' => '13:00',
+    'end_time' => '14:00',
     'notes' => 'pretest valid placement',
 ]);
 
@@ -522,7 +539,7 @@ $oneOffPreview = $meeting([
     'meeting_date' => '2026-09-02',
     'days' => [],
     'room_id' => $lectureRoom,
-    'faculty_id' => $facultyCas2Id,
+    'faculty_id' => $profileCas2,
     'start_time' => '09:00',
     'end_time' => '10:00',
     'notes' => 'one-off preview',
@@ -556,7 +573,7 @@ check('subject overlap is a subject conflict',
     http_status(fn () => $service->create($secretaryScope, $subjectConflictCandidate, $secretary)) === 422,
     'the same subject same weekday must collide');
 check('department constraint rejects a foreign subject', 
-    http_status(fn () => $service->create($secretaryScope, $departmentConflictCandidate, $secretary)) === 422,
+    http_status(fn () => $service->create($adminScope, $departmentConflictCandidate, $admin)) === 422,
     'CAS subject into a CBA section must not save');
 check('one-off date conflict on the same calendar date', 
     http_status(fn () => $service->create($secretaryScope, $oneOffConflictCandidate, $secretary)) === 422,
@@ -571,41 +588,38 @@ check('a valid entry passes all the rules',
 $existing = $schedules->activeInSemester((int) $openSemester);
 check('activeInSemester returns rows', is_array($existing) && count($existing) > 0,
     'count: ' . count($existing));
-if (count($existing) > 0) {
-    $first = $existing[0];
-    @trigger_error("DEBUG: key=" . implode(",", array_keys($first)), E_USER_NOTICE);
-    @error_log("DEBUG keys: " . implode(", ", array_keys($first)));
-    @error_log("DEBUG room_code: " . var_export($first['room_code'] ?? null, true));
-}
-$preview = $conflict->check($validCandidate, $existing);
-check('check() starts with zero errors on a clean candidate', count($preview['errors']) === 0);
-check('check() includes the one_off_date rule when a candidate is a one-off', 
-    $preview['status'] === 'ok');
 
-// Department constraint from the subject's department, not the section.
-// The term holds CAS subjects; this candidate chooses a CBA subject, so
-// every existing CAS meeting trips the department rule.
-$constraintCandidate = $meeting([
-    'section_id' => $sectionCas,
-    'subject_id' => $subjectCba,
-    'faculty_id' => $facultyCas,
-    'room_id' => $lectureRoom,
-    'days' => [1],
-    'start_time' => '09:00',
-    'end_time' => '10:30',
-    'notes' => 'phase 11 department check',
+// A clean Friday afternoon: the proposal is resolved exactly as create() would
+// resolve it, so the engine sees the relation ids, not the raw form payload.
+$cleanPreview = $meeting([
+    'room_id' => $otherRoom,
+    'faculty_id' => $profileCas2,
+    'days' => [5],
+    'start_time' => '13:00',
+    'end_time' => '14:00',
 ]);
-$departmentResult = $conflict->check($constraintCandidate, $existing);
-check('department constraint is evaluated per subject department', 
-    $departmentResult['status'] === 'conflict' && 
-    preg_match('/other department/i', $departmentResult['errors'][0]['message'] ?? '') === 1,
-    'subject IT-201 belongs to CAS, section BSBA-1A belongs to CBA');
+$preview = $conflict->check($service->resolve($secretaryScope, $cleanPreview), $existing);
+check('check() starts with zero errors on a clean candidate', count($preview['errors']) === 0);
+check('a clean weekly candidate returns ok', $preview['status'] === 'ok');
 
-// Suggestion engine: a clean candidate produces no alternatives; a conflicted
-// candidate returns room alternatives that are active, in the same term, and
-// free for the whole window.
-$conflictResult = $conflict->check($roomConflictCandidate, $schedules->activeInSemester((int) $openSemester));
-$altResult = $conflict->suggestAlternatives($roomConflictCandidate, $schedules->activeInSemester((int) $openSemester));
+// Department constraint: the engine re-checks that the section's department
+// agrees with the subject's department, even though resolve() already refuses
+// that combination at the relation level (the second line of defence).
+$departmentCandidate = $service->resolve($adminScope, $meeting());
+$departmentCandidate['section']['department_id'] = $cba;
+$departmentResult = $conflict->check($departmentCandidate, $existing);
+$departmentErrors = array_values(array_filter(
+    $departmentResult['errors'],
+    static fn (array $error): bool => (string) ($error['conflict_type'] ?? '') === 'department'
+));
+check('department constraint is evaluated per subject department', 
+    $departmentResult['status'] === 'conflict' && count($departmentErrors) === 1,
+    'the engine reports the CAS subject / CBA section mismatch');
+
+// Suggestion engine: a conflicted candidate returns room alternatives that are
+// active, in the same term, and free for the whole window.
+$roomConflictResolved = $service->resolve($secretaryScope, $roomConflictCandidate);
+$altResult = $conflict->suggestAlternatives($roomConflictResolved, $schedules->activeInSemester((int) $openSemester));
 check('suggestAlternatives() returns alternatives on conflict', 
     $altResult['status'] === 'conflict' && isset($altResult['alternatives']['rooms']));
 check('room alternatives are bounded', 
@@ -613,7 +627,7 @@ check('room alternatives are bounded',
     count($altResult['alternatives']['rooms']) <= ConflictService::ALTERNATIVE_MAX_ROOMS);
 check('room alternatives exclude the candidate room', 
     isset($altResult['alternatives']['rooms']) && 
-    !in_array((int) $roomConflictCandidate['room_id'], array_map(static fn (array $r): int => (int) $r['room_id'], $altResult['alternatives']['rooms']), true));
+    !in_array((int) $roomConflictResolved['room']['id'], array_map(static fn (array $r): int => (int) $r['room_id'], $altResult['alternatives']['rooms']), true));
 check('room alternatives are active and same-term', 
     isset($altResult['alternatives']['rooms']) &&
     count($altResult['alternatives']['rooms']) > 0 &&
@@ -628,20 +642,6 @@ check('room alternatives are active and same-term',
 
 // Valid pending entry so the conflict preview is meaningful even before
 // the first conflict is created. `faculty_id` is a faculty_profiles.id, not a
-// users.id: passing the account id made resolve() reject the row because that
-// profile belongs to another department.
-$cleanPk = null;
-$cleanRows = $service->create($secretaryScope, $meeting([
-    'room_id' => $otherRoom,
-    'faculty_id' => $profileCas,
-    'days' => [($validCandidateWeekday + 2) % 7 + 1],
-    'start_time' => '11:00',
-    'end_time' => '12:00',
-]), $secretary);
-if (count($cleanRows) === 1) {
-    $cleanPk = $cleanRows[0];
-}
-
 // A conflicting candidate in the same term so the endpoint returns 409.
 $clashingCandidate = $meeting([
     'room_id' => $lectureRoom,
@@ -656,7 +656,7 @@ $clashingCandidate = $meeting([
 // meeting as the schedule the preview is requested for.
 check('a clashing write is refused by create()',
     http_status(fn () => $service->create($secretaryScope, $clashingCandidate, $secretary)) === 422);
-$clashId = $ids[0] ?? null;
+$clashId = $ids[1] ?? null;
 if ($clashId > 0) {
     $conflictPayload = [
         '_token' => $token,
@@ -687,37 +687,41 @@ if ($clashId > 0) {
             'the room alternative must be offered');
     }
 
-    // A clean candidate in the free slot must be a 200.
-    $cleanCandidate = $meeting([
-        'room_id' => $otherRoom,
-        'faculty_id' => $profileCas2,
-        'days' => [(int) $meeting()['days'][0]],
-        'start_time' => '11:00',
-        'end_time' => '12:00',
-        'notes' => 'phase 11 http clean',
-    ]);
-    $cleanCandidateRows = $service->create($secretaryScope, $cleanCandidate, $secretary);
-    $cleanCandidateId = $cleanCandidateRows[0] ?? null;
-    if ($cleanCandidateId > 0) {
-        $cleanPayload = $conflictPayload;
-        $cleanPayload['room_id'] = (string) $otherRoom;
-        $cleanPayload['start_time'] = '11:00';
-        $cleanPayload['end_time'] = '12:00';
-        $cleanPayload['days'] = [(string) ((int) $meeting()['days'][0])];
+    // A clean candidate in the free slot must be a 200. The preview is
+    // attached to an existing row, but the row being previewed is excluded
+    // from its own conflict set, so the window only matters.
+    $cleanPayload = $conflictPayload;
+    $cleanPayload['room_id'] = (string) $otherRoom;
+    $cleanPayload['start_time'] = '15:00';
+    $cleanPayload['end_time'] = '16:00';
+    $cleanPayload['days'] = ['3'];
+    $cleanPayload['notes'] = 'phase 11 http clean';
 
-        $cleanResponse = $kernel->handle(
-            new Request('POST', '/schedules/' . $cleanCandidateId . '/conflict-suggestions', body: $cleanPayload)
-        );
-        check('clean candidate returns 200', $cleanResponse->status() === 200,
-            'the free room/time must not clash');
-    }
+    $cleanResponse = $kernel->handle(
+        new Request('POST', '/schedules/' . $clashId . '/conflict-suggestions', body: $cleanPayload)
+    );
+    check('clean candidate returns 200', $cleanResponse->status() === 200,
+        'the free room/time must not clash');
 }
 
 // The one-off date is captured on the date, not the weekday, so a second
-// one-off on the same date must not overwrite the first.
+// one-off on the same date must not overwrite the first. Seed the first
+// one-off on 2026-09-10 (a free Thursday morning in room 104).
+// Thursday 10:00–11:00 is free for this section in the fixture.
+$service->create($secretaryScope, $meeting([
+    'recurrence' => 'one_off',
+    'meeting_date' => '2026-09-10',
+    'days' => [],
+    'room_id' => $otherRoom,
+    'faculty_id' => $profileCas2,
+    'start_time' => '10:00',
+    'end_time' => '11:00',
+    'notes' => 'phase 11 first one-off',
+]), $secretary);
+
 $dateClashCandidate = $meeting([
     'recurrence' => 'one_off',
-    'meeting_date' => '2026-09-08',
+    'meeting_date' => '2026-09-10',
     'days' => [],
     'room_id' => $lectureRoom,
     'faculty_id' => $profileCas2,
@@ -735,9 +739,9 @@ if ($dateClashId > 0) {
             'semester_id' => (string) $openSemester,
             'section_id' => (string) $sectionCas,
             'subject_id' => (string) $subjectCas,
-            'faculty_id' => (string) $facultyCas2Id,
+            'faculty_id' => (string) $profileCas2,
             'room_id' => (string) $lectureRoom,
-            'meeting_date' => '2026-09-08',
+            'meeting_date' => '2026-09-10',
             'start_time' => '13:00',
             'end_time' => '14:30',
             'recurrence' => 'one_off',
@@ -757,7 +761,7 @@ $deanConflictResponse = $kernel->handle(
         'semester_id' => (string) $openSemester,
         'section_id' => (string) $sectionCba,
         'subject_id' => (string) $subjectCas,
-        'faculty_id' => (string) $facultyCas,
+        'faculty_id' => (string) $profileCas,
         'room_id' => (string) $lectureRoom,
         'start_time' => '09:00',
         'end_time' => '10:30',

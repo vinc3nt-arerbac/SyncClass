@@ -1,65 +1,101 @@
 <?php
 
 /**
- * Base layout (Phase 6).
+ * Base layout (Phase 6, polished in Phase 17).
+ *
+ * Structure: skip link → masthead (brand, mobile toggle, primary nav, user
+ * chip) → main landmark → footer. Phase 17 adds the skip link, the mobile
+ * navigation toggle, `aria-current` on the active section and the small
+ * `app.js` behaviour file (offcanvas nav + the Bootstrap-markup modal that the
+ * notifications page uses).
  *
  * Receives the rendered page as $content plus the helpers provided by
- * App\Core\View: $e, $asset, $route, $csrf_meta. Phase 17 replaces this shell
- * with the sidebar/topbar design system; the structure — document, header,
- * main, footer — is what later phases build on.
+ * App\Core\View: $e, $asset, $route, $csrf_meta, $can.
  *
  * @var callable(mixed): string $e
  * @var callable(string): string $asset
  * @var callable(string, array<string, mixed>): string $route
  * @var callable(string): bool $can
+ * @var callable(): string $csrf_field
  * @var string $csrf_meta
  * @var string $content
  * @var string $title
+ * @var array<string, mixed>|null $auth_user
+ * @var string|null $current_route Route name of the page being rendered.
  */
 
 $title = $title ?? 'SyncClass';
 $authUser = $auth_user ?? null;
+$currentRoute = $current_route ?? '';
+
+/**
+ * Mark the nav link that owns the current page. Prefixes are matched on dot
+ * boundaries so `master.departments.index` lights up Master data but
+ * `reports.index` does not light up a hypothetical `reportsomething`.
+ *
+ * @param array<int, string> $prefixes
+ */
+$navCurrent = static function (array $prefixes) use ($currentRoute): string {
+    foreach ($prefixes as $prefix) {
+        if ($currentRoute === $prefix || str_starts_with($currentRoute, $prefix . '.')) {
+            return ' aria-current="page"';
+        }
+    }
+
+    return '';
+};
 ?>
 <!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#8c1d40">
     <title><?= $e($title) ?> · SyncClass</title>
     <?= $csrf_meta ?>
     <link rel="stylesheet" href="<?= $e($asset('css/app.css')) ?>">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to main content</a>
 <header class="topbar">
     <a class="brand" href="<?= $e($route('home')) ?>">
         <span class="brand-mark" aria-hidden="true">SC</span>
         <span class="brand-name">SyncClass</span>
         <span class="brand-sub">Classroom &amp; Subject Scheduler</span>
     </a>
-    <nav class="topnav" aria-label="Primary">
-        <a href="<?= $e($route('home')) ?>">Overview</a>
+
+    <?php if (is_array($authUser)): ?>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">
+            <span class="nav-toggle-bars" aria-hidden="true"></span>
+            Menu
+        </button>
+    <?php endif; ?>
+
+    <nav class="topnav" id="primary-nav" aria-label="Primary">
+        <a href="<?= $e($route('home')) ?>"<?= $navCurrent(['home']) ?>>Overview</a>
 
         <?php if (is_array($authUser) && $can('schedules.view')): ?>
-            <a href="<?= $e($route('schedules.index')) ?>">Schedules</a>
+            <a href="<?= $e($route('schedules.index')) ?>"<?= $navCurrent(['schedules']) ?>>Schedules</a>
         <?php endif; ?>
 
         <?php if (is_array($authUser) && $can('schedules.view')): ?>
-            <a href="<?= $e($route('calendar.index')) ?>">Calendar</a>
+            <a href="<?= $e($route('calendar.index')) ?>"<?= $navCurrent(['calendar']) ?>>Calendar</a>
         <?php endif; ?>
 
         <?php if (is_array($authUser) && $can('reports.view')): ?>
-            <a href="<?= $e($route('reports.index')) ?>">Reports</a>
+            <a href="<?= $e($route('reports.index')) ?>"<?= $navCurrent(['reports']) ?>>Reports</a>
         <?php endif; ?>
 
         <?php if (is_array($authUser) && $can('departments.view')): ?>
-            <a href="<?= $e($route('master.departments.index')) ?>">Master data</a>
+            <a href="<?= $e($route('master.departments.index')) ?>"<?= $navCurrent(['master']) ?>>Master data</a>
         <?php endif; ?>
 
         <?php if (is_array($authUser) && $can('users.view')): ?>
-            <a href="<?= $e($route('admin.users.index')) ?>">People</a>
+            <a href="<?= $e($route('admin.users.index')) ?>"<?= $navCurrent(['admin']) ?>>People</a>
         <?php endif; ?>
 
-        <a href="<?= $e($route('health')) ?>">Health</a>
+        <a href="<?= $e($route('health')) ?>"<?= $navCurrent(['health']) ?>>Health</a>
 
         <?php if (is_array($authUser)): ?>
             <span class="user-chip">
@@ -76,13 +112,15 @@ $authUser = $auth_user ?? null;
     </nav>
 </header>
 
-<main class="shell">
+<main class="shell" id="main" tabindex="-1">
     <?= $content ?>
 </main>
 
 <footer class="footer">
-    <span>SyncClass 1.0.0-dev · native PHP · MySQL</span>
+    <span>SyncClass 1.1.0-dev · native PHP · MySQL</span>
     <span>Pipeline: Request → Router → Middleware → Controller → View → Response</span>
 </footer>
+
+<script src="<?= $e($asset('js/app.js')) ?>" defer></script>
 </body>
 </html>

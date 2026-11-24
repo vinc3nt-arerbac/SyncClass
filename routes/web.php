@@ -32,8 +32,8 @@ declare(strict_types=1);
 
 use App\Controllers\AuthController;
 use App\Controllers\CalendarController;
+use App\Controllers\DashboardController;
 use App\Controllers\HealthController;
-use App\Controllers\HomeController;
 use App\Controllers\MasterData\AcademicYearController;
 use App\Controllers\MasterData\BuildingController;
 use App\Controllers\MasterData\DepartmentController;
@@ -74,10 +74,17 @@ return static function (Router $router, Container $container): void {
         ->name('health');
 
     // -----------------------------------------------------------------------
-    // Private: the application shell (becomes the Phase 16 dashboard)
+    // Private: dashboard (Phase 16, DASH-01…DASH-03).
+    // Only `auth` is required: the dashboard is every role's landing page and
+    // the role-aware scope is applied by DashboardService, not by a permission.
     // -----------------------------------------------------------------------
-    $router->get('/', [HomeController::class, 'index'], ['auth'], 'Scheduler overview')
+    $router->get('/', [DashboardController::class, 'index'], ['auth'], 'Dashboard')
         ->name('home');
+
+    // Chart.js payload for the dashboard. Scoped and `no-store` like the page:
+    // it is a per-user, per-term snapshot.
+    $router->get('/api/dashboard', [DashboardController::class, 'charts'], ['auth'], 'Dashboard chart data')
+        ->name('dashboard.charts');
 
     // -----------------------------------------------------------------------
     // Private: staff directory (Phase 8). The route-level permission is the
@@ -218,6 +225,11 @@ return static function (Router $router, Container $container): void {
         ->name('schedules.edit');
     $router->post('/schedules/{id}', [ScheduleController::class, 'update'], ['auth', 'permission:schedules.update'], 'Update meeting')
         ->name('schedules.update');
+    // CAL-03: the calendar's drag handler PATCHes this JSON endpoint; the
+    // controller converts the dropped ISO range back into the form shape and
+    // routes it through the same ScheduleService::update() rules.
+    $router->patch('/api/schedules/{id}', [ScheduleController::class, 'move'], ['auth', 'permission:schedules.update'], 'Move meeting')
+        ->name('schedules.move');
     // Any-of, because approval belongs to a role that does not edit
     // (dean: view + approve). The service enforces the exact permission for
     // the requested target, so this gate only decides who may knock.

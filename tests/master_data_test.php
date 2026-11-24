@@ -45,6 +45,7 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 $config = require dirname(__DIR__) . '/bootstrap.php';
 require __DIR__ . '/support/auth_schema.php';
 require __DIR__ . '/support/master_schema.php';
+require __DIR__ . '/support/sqlite_compat.php';
 
 /** @var array<int, array{label: string, passed: bool, detail: string}> $checks */
 $checks = [];
@@ -66,6 +67,8 @@ $testConfig['app']['session']['name'] = 'syncclass_master_test';
 $configObject = new Config($testConfig);
 
 $database = new Database(['driver' => 'sqlite', 'database' => ':memory:']);
+// MasterDataRepository paginates with MySQL CONCAT; mirror it for SQLite.
+sqlite_mysql_compat($database);
 auth_schema($database);
 master_schema($database);
 

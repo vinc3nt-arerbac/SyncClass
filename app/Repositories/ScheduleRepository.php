@@ -310,6 +310,18 @@ final class ScheduleRepository extends MasterDataRepository
         $scope = Scope::forUser($authUser);
 
         $rows = $this->activeInSemester($semesterId);
+
+        // CAL-04: an explicit department filter narrows the feed before the
+        // actor's own scope is applied. Without this the query parameter was
+        // accepted by the controller and then ignored, so a dean's department
+        // filter still painted every department's classes.
+        if ($departmentId !== null && $departmentId > 0) {
+            $rows = array_values(array_filter(
+                $rows,
+                static fn (array $row): bool => (int) $row['department_id'] === $departmentId
+            ));
+        }
+
         $rows = array_values(
             array_filter($rows, static function (array $row) use ($scope): bool {
                 if ($scope->isAdministrator()) {
@@ -415,7 +427,10 @@ final class ScheduleRepository extends MasterDataRepository
             ? $this->database->selectOne('SELECT id FROM semesters WHERE is_current = 1 LIMIT 1')
             : $this->database->selectOne('SELECT id FROM semesters WHERE is_current = 1 LIMIT 1');
 
-        return $row === false ? null : (int) $row['id'];
+        // selectOne() returns null when no term is marked current (a fresh
+        // install, or the dashboard before any term exists). Reading ['id']
+        // from null used to emit a warning and break the session headers.
+        return is_array($row) ? (int) $row['id'] : null;
     }
 
     /**

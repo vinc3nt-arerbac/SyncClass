@@ -114,6 +114,14 @@
         return d.toISOString();
     }
 
+    // The layout renders <meta name="csrf-token"> (Security::csrfMeta()). Every
+    // unsafe fetch must echo it in X-CSRF-Token or the middleware answers 419
+    // before the drag ever reaches the schedule rules.
+    function csrfToken() {
+        const meta = $.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') || '' : '';
+    }
+
     // ---------------------------------------------------------------------
     // Toasts (CAL‑03: conflicts are surfaced as non‑blocking toasts)
     // ---------------------------------------------------------------------
@@ -149,7 +157,15 @@
         active: false,
         pending: null, // { tile, eventId, newRange, onComplete }
 
-        async submitMove(tile, eventId, newRange, onComplete) {
+        async submitMove(tile, eventId, newRange, onComplete, onRevert) {
+            // CAL-03/UAT-6: the tile must snap back to its stored slot on every
+            // refusal, not only on a 409. The caller passes FullCalendar's
+            // revert(), which restores the pre-drag position without a reload.
+            const fail = () => {
+                if (typeof onRevert === 'function') {
+                    onRevert();
+                }
+            };
             this.active = true;
             this.pending = { tile, eventId, newRange, onComplete };
 
@@ -161,6 +177,7 @@
                         headers: {
                             'Content-Type': 'application/json',
                             Accept: 'application/json',
+                            'X-CSRF-Token': csrfToken(),
                         },
                         body: JSON.stringify({
                             start: newRange.start.toISOString(),
@@ -183,6 +200,7 @@
                     this.pending = null;
                     this.active = false;
                     onComplete({ status: 409, message: body.message || 'Conflict' }, null);
+                    fail();
                     return false;
                 }
 
@@ -190,17 +208,20 @@
                     this.pending = null;
                     this.active = false;
                     onComplete({ status: 422, message: body.message || 'Validation' }, null);
+                    fail();
                     return false;
                 }
 
                 this.pending = null;
                 this.active = false;
                 onComplete({ status: response.status, message: 'Unexpected server response' }, null);
+                fail();
                 return false;
             } catch (err) {
                 this.pending = null;
                 this.active = false;
                 onComplete({ status: 0, message: err.message || 'Network error' }, null);
+                fail();
                 return false;
             }
         },
@@ -238,7 +259,8 @@
                 } else if (data) {
                     toast('Slot updated', 'ok');
                 }
-            }
+            },
+            () => arg.revert()
         );
     }
 

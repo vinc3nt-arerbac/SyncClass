@@ -71,7 +71,10 @@ final class ScheduleService
         private readonly TermRepository $terms,
         private readonly AuthorizationService $authorization,
         private readonly Config $config,
-        private readonly ConflictService $conflict
+        private readonly ConflictService $conflict,
+        // Optional so the standalone suites (and any CLI backfill) can build
+        // the service without an inbox; the HTTP container autowires it.
+        private readonly ?NotificationService $notifications = null
     ) {
     }
 
@@ -161,7 +164,14 @@ final class ScheduleService
         // replacing, the room it is now sharing) even though the old row was
         // clean, so the check runs with the resolved facts and the active
         // rows in the term, same as create().
-        $existing = $this->schedules->activeInSemester((int) $resolved['semester']['id']);
+        $existing = array_values(array_filter(
+            $this->schedules->activeInSemester((int) $resolved['semester']['id']),
+            // The row being edited is not its own conflict. Without this every
+            // edit that kept or extended the old window clashed with the row
+            // it was replacing (a 14:00–15:00 meeting could not become
+            // 14:00–16:00 because it overlapped itself).
+            static fn (array $meeting): bool => (int) $meeting['id'] !== (int) $schedule['id']
+        ));
         $result = $this->conflict->check($resolved, $existing);
 
         if ($result['status'] === 'conflict') {
@@ -245,6 +255,46 @@ final class ScheduleService
         };
 
         $this->schedules->applyStatus((int) $schedule['id'], $target, $fields);
+
+        // UAT-2: an approval must reach the teacher who has to deliver the
+        // class. The inbox row is written after the status change commits so a
+        // notification is never sent for a transition that failed.
+        if ($target === 'approved') {
+            $this->notifyFacultyOfApproval($schedule);
+        }
+    }
+
+    /**
+     * Write the faculty member's in-app notification for an approved entry.
+     *
+     * @param array<string, mixed> $schedule
+     */
+    private function notifyFacultyOfApproval(array $schedule): void
+    {
+        if ($this->notifications === null) {
+            return;
+        }
+
+        $faculty = $this->faculty->find((int) $schedule['faculty_id']);
+        $recipient = (int) ($faculty['user_id'] ?? 0);
+
+        if ($recipient <= 0) {
+            return;
+        }
+
+        $this->notifications->notify(
+            $recipient,
+            'schedule.approved',
+            'Timetable approved',
+            sprintf(
+                '%s \u00b7 %s for %s was approved.',
+                (string) ($schedule['subject_code'] ?? 'Class'),
+                (string) ($schedule['section_code'] ?? 'section'),
+                (string) ($schedule['semester_code'] ?? 'the term')
+            ),
+            'in_app',
+            null
+        );
     }
 
     /**

@@ -24,6 +24,8 @@ declare(strict_types=1);
 
 use App\Core\Config;
 use App\Core\Database;
+use App\Core\Kernel;
+use App\Core\Request;
 use App\Repositories\BuildingRepository;
 use App\Repositories\FacultyRepository;
 use App\Repositories\PermissionRepository;
@@ -218,19 +220,73 @@ $admin = $database->selectOne(
 );
 
 // ---------------------------------------------------------------------------
-// CAL-01: the calendar page renders and its month/week/day/timetable views
-// assemble from the same controller. We verify the renderer has the tiles and
-// the view switcher in the shell.
+// A second department and room so CAL-04's department filter has something to
+// exclude: CBA meets on Tuesday 08:00–09:30 in B-201.
 // ---------------------------------------------------------------------------
-check('CAL-01: calendar index page loads', true);
-check('CAL-01: month view tile present', true);
-check('CAL-01: week view tile present', true);
-check('CAL-01: day view tile present', true);
-check('CAL-01: timetable view tile present', true);
+$database->insert('departments', ['code' => 'CBA', 'name' => 'College of Business Administration']);
+$cba = (int) $database->scalar('SELECT id FROM departments WHERE code = :code', ['code' => 'CBA']);
+
+$roomCba = $rooms->create([
+    'building_id' => $building,
+    'code' => 'B-201',
+    'room_type' => 'lecture',
+    'capacity' => 40,
+]);
+
+$subjectCba = $subjects->create([
+    'code' => 'BA 101',
+    'title' => 'Introduction to Business',
+    'department_id' => $cba,
+    'units' => 3.0,
+    'lecture_hours' => 3,
+    'lab_hours' => 0,
+]);
+
+$sectionCba = $sections->create([
+    'code' => 'BA101A',
+    'name' => 'BA 101A — Intro',
+    'program' => 'BSc',
+    'year_level' => 1,
+    'department_id' => $cba,
+    'student_count' => 30,
+]);
+
+$facultyCbaUserId = auth_create_user($database, [
+    'email' => 'faculty.cba@sac.edu.ph',
+    'role_code' => 'faculty',
+    'first_name' => 'Paolo',
+    'last_name' => 'Santos',
+    'department_id' => $cba,
+]);
+
+$facultyCbaProfile = $faculty->create([
+    'faculty_id' => $facultyCbaUserId,
+    'department_id' => $cba,
+    'employment_type' => 'full_time',
+    'max_load_units' => 18,
+]);
+
+$adminScope = Scope::forUser($admin);
+
+// The CAS class the calendar paints: Monday 09:00–10:30 in A-101.
+$first = $service->create($adminScope, $meeting(), $admin);
+check('fixture: the CAS class is created', count($first) === 1);
+
+// The CBA class: Tuesday 08:00–09:30 in B-201.
+$cbaIds = $service->create($adminScope, $meeting([
+    'section_id' => $sectionCba,
+    'subject_id' => $subjectCba,
+    'faculty_id' => $facultyCbaProfile,
+    'room_id' => $roomCba,
+    'days' => [2],
+    'start_time' => '08:00',
+    'end_time' => '09:30',
+]), $admin);
+check('fixture: the CBA class is created', count($cbaIds) === 1);
 
 // ---------------------------------------------------------------------------
-// CAL-04: server-side filters. The repository's calendarFeed() applies
-// `department_id` and `semester_id`; the API forwards both as query params.
+// CAL-04 / CAL-05: server-side filters and the visible window. The repository
+// expands weekly rows into dated occurrences inside the requested range.
 // ---------------------------------------------------------------------------
 /** @var array<string, mixed> $facultyCasUser */
 $facultyCasUser = $database->selectOne(
@@ -242,60 +298,149 @@ $facultyCasUser = $database->selectOne(
     ['id' => $facultyCbaId]
 );
 
-// CAS department's calendar feed, scoped by year/semester.
+// 24–30 August 2026 contains exactly one Monday and one Tuesday.
 $rows = $schedules->calendarFeed(
     '2026-08-24T00:00:00Z',
     '2026-08-30T23:59:59Z',
     $semesterId,
+    null,
+    $admin
+);
+check('CAL-04: the admin feed returns both departments\u2019 occurrences', count($rows) === 2,
+    'count: ' . count($rows));
+
+$casRows = $schedules->calendarFeed(
+    '2026-08-24T00:00:00Z',
+    '2026-08-30T23:59:59Z',
+    $semesterId,
     $cas,
+    $admin
+);
+check('CAL-04: the department filter excludes the other department', count($casRows) === 1
+    && (int) $casRows[0]['department_id'] === $cas);
+
+$facultyRows = $schedules->calendarFeed(
+    '2026-08-24T00:00:00Z',
+    '2026-08-30T23:59:59Z',
+    $semesterId,
+    null,
     $facultyCasUser
 );
+check('CAL-04: a faculty member sees only their own class', count($facultyRows) === 1);
 
-check('CAL-04: department-scoped range feed returns rows for the scoped department', count($rows) === 1);
+$outside = $schedules->calendarFeed(
+    '2026-09-07T00:00:00Z',
+    '2026-09-13T23:59:59Z',
+    $semesterId,
+    $cas,
+    $admin
+);
+check('CAL-05: the feed is bounded by the requested window', count($outside) === 1,
+    'one Monday occurrence in the following week, none outside it');
+
+$beforeTerm = $schedules->calendarFeed(
+    '2026-01-05T00:00:00Z',
+    '2026-01-11T23:59:59Z',
+    $semesterId,
+    $cas,
+    $admin
+);
+check('CAL-05: nothing is painted outside the term', $beforeTerm === []);
 
 // ---------------------------------------------------------------------------
-// CAL-05: the range feed returns only the visible window — the repository's
-// calendarFeed() filters to the requested `start`/`end` ISO-8601 strings and
-// returns no rows outside it.
+// CAL-01: the page and its four views render through the real HTTP kernel.
 // ---------------------------------------------------------------------------
-check('CAL-05: range feed is bounded by the requested window', count($rows) === 1);
+$kernel = Kernel::boot($testConfig);
+$container = $kernel->container();
+$container->instance(Database::class, $database);
+
+$security = $container->get(App\Core\Security::class);
+$auth = $container->get(App\Services\AuthService::class);
+
+// CLI has already sent headers, so PHP refuses to start a session; the kernel
+// reuses the session binding without a PHP session handle (see schedule_test).
+@session_start();
+
+$auth->loginUser($adminId);
+$page = $kernel->handle(new Request('GET', '/calendar'));
+check('CAL-01: calendar index page loads', $page->status() === 200);
+$html = (string) $page->body();
+check('CAL-01: the view switcher offers month/week/day/timetable',
+    str_contains($html, 'view=week') && str_contains($html, 'view=day')
+    && str_contains($html, 'view=timetable') && str_contains($html, 'month-picker'));
+check('CAL-01: the month grid renders weekday headers', substr_count(strtolower($html), 'monday') >= 1);
+$pageHeaders = array_change_key_case($page->headers(), CASE_LOWER);
+check('CAL-01: the rendered page is private',
+    str_contains(strtolower((string) ($pageHeaders['cache-control'] ?? '')), 'no-store'));
+
+$api = $kernel->handle(new Request('GET', '/api/calendar/events', [
+    'start' => '2026-08-24T00:00:00Z',
+    'end' => '2026-08-30T23:59:59Z',
+    'semester_id' => (string) $semesterId,
+]));
+check('CAL-05: the JSON feed answers 200', $api->status() === 200);
+$payload = json_decode((string) $api->body(), true, 512, JSON_THROW_ON_ERROR);
+check('CAL-05: the JSON feed returns the visible occurrences',
+    ($payload['data']['total'] ?? -1) === 2, 'event count from the API envelope');
+check('CAL-05: the JSON feed carries the class codes',
+    str_contains((string) $api->body(), 'CSC 101') && str_contains((string) $api->body(), 'BA 101'));
+
+$deanScoped = $kernel->handle(new Request('GET', '/api/calendar/events', [
+    'start' => '2026-08-24T00:00:00Z',
+    'end' => '2026-08-30T23:59:59Z',
+    'department_id' => (string) $cas,
+]));
+$deanPayload = json_decode((string) $deanScoped->body(), true, 512, JSON_THROW_ON_ERROR);
+check('CAL-04: the API honours department_id', ($deanPayload['data']['total'] ?? -1) === 1);
 
 // ---------------------------------------------------------------------------
-// CAL-03: a drag move that clashes is rejected by ConflictService through the
-// same ScheduleService write path the form uses, returning 409 with
-// errors[] + alternatives[] (1..3 suggestions).
+// CAL-03: a drag move that clashes is refused by the same write path and the
+// preview offers bounded room alternatives (this is UAT-6's engine).
 // ---------------------------------------------------------------------------
-// Push a first placement for the calendar fixture (room A-101, Monday
-// 09:00-10:30). The conflict engine then sees a second candidate at the same
-// room on the same weekday with an overlapping window → 409.
-$adminScope = Scope::forUser($admin);
-$first = $service->create($adminScope, $meeting(), $admin);
-$firstPk = $first[0];
+$rooms->create(['building_id' => $building, 'code' => 'A-102', 'room_type' => 'lecture', 'capacity' => 40]);
 
-// A conflicting candidate: same room, same weekday, with a 30-minute overlap
-// (09:00-10:30 vs 10:00-10:30) on the same term.
 $overlap = $meeting([
     'start_time' => '10:00',
     'end_time' => '10:30',
 ]);
 
-// ConflictService::check() is the Phase 11 pure rule evaluator; it is
-// side-effect-free, so the calendar drag can call it to preflight a move
-// without writing. The service exposes two calls: check() returns
-// {status, errors[], warnings[]} and suggestAlternatives() adds alternatives.
 $existing = $schedules->activeInSemester($semesterId);
 $resolved = $service->resolve($adminScope, $overlap);
 $conflictCheck = $conflict->check($resolved, $existing);
 check('CAL-03: conflict engine reports a clash', ($conflictCheck['status'] ?? '') === 'conflict'
     && count($conflictCheck['errors']) > 0);
+check('CAL-03: the clash names the room rule', in_array('room', array_column($conflictCheck['errors'], 'conflict_type'), true));
+check('CAL-03: the write path refuses the same move',
+    (static function () use ($service, $adminScope, $overlap, $admin): ?int {
+        try {
+            $service->create($adminScope, $overlap, $admin);
+        } catch (App\Core\HttpException $exception) {
+            return $exception->status();
+        }
+
+        return null;
+    })() === 422);
 
 $suggestions = $conflict->suggestAlternatives($resolved, $existing);
 check('CAL-03: alternatives are offered on a clash',
     isset($suggestions['alternatives']['rooms']) && is_array($suggestions['alternatives']['rooms']));
+check('CAL-03: a free room is proposed', count($suggestions['alternatives']['rooms'] ?? []) >= 1);
 check('CAL-03: room alternatives are bounded',
     count($suggestions['alternatives']['rooms'] ?? []) <= ConflictService::ALTERNATIVE_MAX_ROOMS);
 
-if (!empty($suggestions['alternatives']['rooms'])) {
-    echo '  [info] first alternative room: '
-        . ($suggestions['alternatives']['rooms'][0]['code'] ?? 'n/a') . "\n";
+// ---------------------------------------------------------------------------
+// Summary. A test script that never reports is indistinguishable from a crash,
+// so the calendar suite ends with the same PASS/FAIL table as the others and a
+// non-zero exit status on any failure.
+// ---------------------------------------------------------------------------
+$failures = 0;
+foreach ($checks as $result) {
+    if (!$result['passed']) {
+        $failures++;
+        echo 'FAIL ' . $result['label']
+            . ($result['detail'] !== '' ? ' — ' . $result['detail'] : '') . PHP_EOL;
+    }
 }
+
+echo PHP_EOL . count($checks) . ' check(s), ' . $failures . ' failure(s).' . PHP_EOL;
+exit($failures === 0 ? 0 : 1);

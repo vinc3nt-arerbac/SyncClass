@@ -115,17 +115,12 @@ final class ConflictService
             : ($candidate['days'][0] ?? null);
 
         foreach ($memberships as $membership) {
-            // The candidate itself can be its own conflict when the term holds
-            // two identical entries; skip the self-match by id.
-            $candidateId = $candidate['meeting_date'] !== null
-                ? $this->meetingIdForDate($candidate['meeting_date'], $candidate['semester']['id'])
-                : null;
-
+            // A candidate has no stored identity of its own: the callers
+            // (ScheduleService::update(), the preview controller) remove the
+            // row being edited from `$existing` before calling. Inferring the
+            // id from the meeting date here made a *new* second one-off on an
+            // occupied date look like the row it was colliding with.
             foreach ($membership['rows'] as $meeting) {
-                if ($meeting['id'] === $candidateId) {
-                    continue;
-                }
-
                 if ($candidateWeekday !== null && (int) $candidateWeekday !== (int) $meeting['day_of_week']) {
                     continue;
                 }
@@ -223,13 +218,6 @@ final class ConflictService
             }));
 
             foreach ($existingOnDate as $meeting) {
-                if ((int) $meeting['id'] === $this->meetingIdForDate(
-                    (string) $candidate['meeting_date'],
-                    (int) $candidate['semester']['id']
-                )) {
-                    continue;
-                }
-
                 $errors[] = $this->oneOffDateConflict(
                     ['code' => $candidate['subject_code'], 'title' => $candidate['subject_title']],
                     ['code' => $meeting['subject_code'], 'title' => $meeting['subject_title']],

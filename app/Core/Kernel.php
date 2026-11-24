@@ -200,8 +200,11 @@ final class Kernel
         // than the bare one captured at boot.
         $this->container->instance(Request::class, $request);
 
-        // Layouts render the signed-in user; null for public pages.
-        $this->container->get(View::class)->share('auth_user', $request->attribute('auth_user'));
+        // Layouts render the signed-in user; null for public pages. The route
+        // name lets the layout mark the active nav link (Phase 17, NFR-08).
+        $view = $this->container->get(View::class);
+        $view->share('auth_user', $request->attribute('auth_user'));
+        $view->share('current_route', $request->attribute('route_name'));
 
         if ($handler instanceof Closure) {
             $result = $handler($request, ...$parameters);

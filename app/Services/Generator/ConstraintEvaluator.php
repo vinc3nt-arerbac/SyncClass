@@ -55,7 +55,10 @@ final class ConstraintEvaluator
 
             $check = $this->conflict->check($candidate, $allTeachers);
 
-            if ($check['status'] === 'error') {
+            // ConflictService returns `ok` or `conflict`; comparing against
+            // `error` meant the generator's feasibility filter accepted every
+            // placement, including double-booked ones.
+            if ($check['status'] === 'conflict') {
                 $errors = array_merge($errors, $check['errors']);
 
                 // Short-circuit: the first hard conflict ends the branch.

@@ -6,6 +6,7 @@ namespace App\Controllers\Scheduling;
 
 use App\Core\Config;
 use App\Core\Controller;
+use App\Core\HttpException;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Router;
@@ -122,8 +123,12 @@ final class ScheduleController extends Controller
         $resolved = $this->service->resolve($scope, $data);
 
         // All reads are scoped by the term, and every row here is active: the
-        // candidate is compared against the term's real timetable.
-        $existing = $this->schedules->activeInSemester((int) $resolved['semester']['id']);
+        // candidate is compared against the term's real timetable — except the
+        // entry being previewed, which must not clash with itself.
+        $existing = array_values(array_filter(
+            $this->schedules->activeInSemester((int) $resolved['semester']['id']),
+            static fn (array $meeting): bool => (int) $meeting['id'] !== (int) $schedule['id']
+        ));
         $result = $this->conflict->check($resolved, $existing);
 
         if ($result['status'] === 'ok') {
@@ -200,6 +205,104 @@ final class ScheduleController extends Controller
         );
 
         return $this->redirectToList('updated');
+    }
+
+    /**
+     * CAL-03 / UAT-6: apply a calendar drag or resize.
+     *
+     * The browser sends ISO-8601 `start`/`end` values for the dropped tile.
+     * The endpoint converts them back into the form shape and calls the same
+     * ScheduleService::update() the edit page uses, so a drag cannot bypass a
+     * single scheduling rule. A clash is a 409 with `errors[]` and room
+     * `alternatives[]`; the JavaScript reverts the tile on any non-2xx.
+     *
+     * The route is PATCH /api/schedules/{id} (see routes/web.php), which is
+     * the URL assets/js/calendar.js has always called.
+     */
+    public function move(Request $request, string $id): Response
+    {
+        $scope = $this->scope($request);
+        $actor = $this->actor($request);
+        $schedule = $this->load($request, (int) $id);
+        $payload = $request->json();
+
+        try {
+            $start = new \DateTimeImmutable((string) ($payload['start'] ?? ''));
+            $end = new \DateTimeImmutable((string) ($payload['end'] ?? ''));
+        } catch (\Exception) {
+            return Response::json([
+                'ok' => false,
+                'message' => 'The drop did not carry a valid start and end.',
+            ], 422);
+        }
+
+        $oneOff = (string) $schedule['recurrence'] === 'one_off';
+        $data = [
+            'semester_id' => (string) $schedule['semester_id'],
+            'section_id' => (string) $schedule['section_id'],
+            'subject_id' => (string) $schedule['subject_id'],
+            'faculty_id' => (string) $schedule['faculty_id'],
+            'room_id' => (string) $schedule['room_id'],
+            'start_time' => $start->format('H:i'),
+            'end_time' => $end->format('H:i'),
+            'recurrence' => $oneOff ? 'one_off' : 'weekly',
+            // A one-off moved to another day changes its date; a weekly entry
+            // moves the single weekday it occupies.
+            'meeting_date' => $oneOff ? $start->format('Y-m-d') : null,
+            'days' => [$start->format('N')],
+            'notes' => (string) ($schedule['notes'] ?? ''),
+        ];
+
+        try {
+            $this->service->update($scope, $schedule, $data, $actor);
+        } catch (HttpException $exception) {
+            $errors = $exception->errors();
+            $conflicts = $errors['conflicts'] ?? null;
+
+            if (is_array($conflicts)) {
+                // Offer the same room alternatives the form preview shows. The
+                // row being moved is excluded so it cannot conflict with itself.
+                $resolved = $this->service->resolve($scope, $data);
+                $existing = array_values(array_filter(
+                    $this->schedules->activeInSemester((int) $schedule['semester_id']),
+                    static fn (array $meeting): bool => (int) $meeting['id'] !== (int) $schedule['id']
+                ));
+
+                return Response::json([
+                    'ok' => false,
+                    'message' => 'That slot clashes with an existing meeting.',
+                    'errors' => $conflicts,
+                    'alternatives' => $this->conflict->suggestAlternatives($resolved, $existing)['alternatives'] ?? [],
+                ], 409);
+            }
+
+            return Response::json([
+                'ok' => false,
+                'message' => $exception->getMessage(),
+                'errors' => $errors,
+            ], $exception->status());
+        }
+
+        $this->audit->record(
+            'schedule.moved',
+            (int) $actor['id'] ?: null,
+            'schedule',
+            (int) $schedule['id'],
+            sprintf('Moved schedule #%d to %s %s–%s', $schedule['id'], $start->format('D'), $data['start_time'], $data['end_time']),
+            ['day_of_week' => (int) $start->format('N'), 'start_time' => $data['start_time'], 'end_time' => $data['end_time']],
+            $request->ip(),
+            $request->userAgent()
+        );
+
+        return Response::json([
+            'ok' => true,
+            'data' => [
+                'id' => (int) $schedule['id'],
+                'day_of_week' => (int) $start->format('N'),
+                'start_time' => $data['start_time'],
+                'end_time' => $data['end_time'],
+            ],
+        ]);
     }
 
     /**

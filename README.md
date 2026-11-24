@@ -94,7 +94,8 @@ Copy `config/local.example.php` to `config/local.php` for machine-specific setti
 | GET | `/login` | global + `guest` | Sign-in form; signed-in users are redirected to `/` |
 | POST | `/login` | global | Credential check, throttle (429) and remember-me cookie |
 | POST | `/logout` | global + `auth` | Destroys the session and clears the remember-me cookie |
-| GET | `/` | global + `auth` | Scheduler overview (becomes the Phase 16 dashboard) |
+| GET | `/` | global + `auth` | Role-aware dashboard (DASH-01…03): today, seven-day agenda, workload, utilization, conflicts and charts |
+| GET | `/api/dashboard` | global + `auth` | Scoped Chart.js series for the dashboard; `no-store` JSON envelope (DASH-03) |
 | GET | `/health` | global | JSON environment check; 503 when a required extension is missing |
 | POST | `/pipeline/echo` | global | Validated JSON probe; 419 without a CSRF token |
 | GET | `/pipeline/guarded` | global + `auth` | 401 JSON for API clients, 302 to `/login` for browsers |

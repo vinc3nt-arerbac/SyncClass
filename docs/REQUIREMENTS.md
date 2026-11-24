@@ -439,6 +439,110 @@ subjects, 30 rooms, 30 schedule records) gives the generator enough volume
 to exercise the backtracking and the objective scorer.
 
 **Next phase** — Phase 14: Collaboration & Notifications (NTF-01…04, COL-01…05) and Phase 15: Reports + exports (RPT-01…07).
+
+**Phase 16 — Dashboard Analytics (DASH-01…03)**
+
+| ID | Requirement | Status |
+|---|---|---|
+| DASH-01 | Widgets: total teachers, subjects, rooms, today's classes, active conflicts, department statistics, room utilization %, faculty workload, upcoming sessions | done |
+| DASH-02 | Widgets are role-aware: faculty see their own day, a dean their department, an administrator the institution | done |
+| DASH-03 | Charts render with Chart.js from JSON endpoints; no chart data is hard-coded in views | done |
+
+**Design decisions**
+
+- The dashboard is a composition of read models, not a new source of truth:
+  `AnalyticsRepository` owns the count/agenda queries and `ReportService` is
+  reused for faculty load and room utilization, so the widgets and the reports
+  cannot disagree.
+- Scope is applied in SQL exactly as in the reports module (administrator →
+  institution, dean/secretary → department, faculty → own meetings), and a
+  faculty audience gets a widget row built around their own day rather than
+  institution totals that would be meaningless to them.
+- Today's classes and the agenda expand weekly rows across real dates and add
+  one-off meetings by `meeting_date`; a cancelled meeting never appears.
+- The charts stay data-free in the view (DASH-03): the page carries the
+  endpoint URL and canvases, `public/assets/js/dashboard.js` fetches the
+  scoped series and renders them with a locally vendored Chart.js build
+  (`script-src 'self'` forbids a CDN), and a missing library degrades to a
+  message without breaking the server-rendered widgets.
+
+**Files created** (Phase 16):
+
+- `app/Repositories/AnalyticsRepository.php` — scoped counts, department
+  statistics, today's meetings, seven-day window, conflict counts.
+- `app/Services/DashboardService.php` — audience, widgets, agenda, chart
+  series, empty-term handling.
+- `app/Controllers/DashboardController.php` — `GET /`, `GET /api/dashboard`.
+- `app/Views/dashboard/index.php` — the dashboard page.
+- `public/assets/js/dashboard.js`, `public/assets/js/vendor/chart.umd.min.js`,
+  `public/assets/css/app.css` — renderer, vendored Chart.js and dashboard
+  styles.
+- `routes/web.php` — `/` now serves the dashboard; `/api/dashboard` added.
+- `tests/dashboard_test.php` — 70 checks.
+
+**Testing procedure** (workspace, SQLite mirror):
+
+```bash
+cd /workspace/chats/e3c32778e44f5cc31faf9e26
+php tests/dashboard_test.php
+```
+
+Pins the clock to Monday 2026-06-01, then asserts the administrator,
+department and faculty widget rows, the seven-day agenda (including the
+one-off), workload/utilization/conflict reuse, chart-series shape, the empty
+term, term fallback and HTTP rendering (including the anonymous redirect).
+
+**Next phase** — Phase 17: UI polish, responsive and accessibility review
+(NFR-08, NFR-09).
+
+**Phase 17 — UI Polish (NFR-08, NFR-09)**
+
+| ID | Requirement | Status |
+|---|---|---|
+| NFR-08 | Accessibility: WCAG 2.1 AA contrast, focus visibility, labels, keyboard operation | reviewed |
+| NFR-09 | Responsiveness: usable at 360 px, 768 px and 1280 px+; offcanvas navigation on small screens | reviewed |
+
+**Design decisions**
+
+- The views had accumulated two class vocabularies — the project's `.button` /
+  `.filters` and Bootstrap names such as `.btn-primary`, `.form-select`,
+  `.list-group` and `.modal` — but the Bootstrap bundle was never loaded, so
+  those controls were unstyled and its modal never opened. Phase 17 adds a
+  Bootstrap-compatible component layer to `app.css` and a small dependency-free
+  `app.js` for the two behaviours the shell needs, rather than shipping the
+  whole framework.
+- Accessibility is structural: a skip link, one focusable `<main>` landmark,
+  `aria-current` on the active navigation item, a mobile toggle with
+  `aria-expanded`/`aria-controls`, a global `:focus-visible` ring, and a modal
+  that traps focus, closes on Escape/backdrop and returns focus to its opener.
+- Responsiveness is CSS-only where possible: the nav collapses below 900 px,
+  filters and dashboards stack below 640 px, and the 360 px case gets a
+  single-column stat row. The CSS pragma `prefers-reduced-motion` disables
+  transitions, and print hides the new chrome.
+
+**Files created/changed** (Phase 17):
+
+- `app/Views/layouts/app.php` — skip link, mobile toggle, `aria-current`, main
+  landmark, `app.js` include, theme metadata.
+- `app/Core/Kernel.php` — shares `current_route` with the view.
+- `public/assets/js/app.js` — navigation and modal behaviour.
+- `public/assets/css/app.css` — the Phase 17 component, responsive and focus
+  layer (appended after the existing modules).
+- `tests/ui_polish_test.php` — 28 structural checks.
+
+**Testing procedure**:
+
+```bash
+cd /workspace/chats/e3c32778e44f5cc31faf9e26
+php tests/ui_polish_test.php
+```
+
+Asserts the shell contract (skip link, landmarks, toggle wiring,
+`aria-current`, local assets), the component selectors the views use, the 900 px
+/ 640 px breakpoints and the reduced-motion/print rules. Visual appearance was
+reviewed in CSS; it was not screenshotted in this environment.
+
+**Next phase** — Phase 18: Testing (UAT-1…6, CNF-11 verification).
 | 16 Dashboard Analytics | DASH-01…03 |
 | 17 UI Polish | NFR-08, NFR-09 |
 | 18 Testing | §11 UAT-1…6, CNF-11 (verification) |

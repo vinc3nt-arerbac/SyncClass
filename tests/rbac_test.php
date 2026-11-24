@@ -41,6 +41,8 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 /** @var array<string, mixed> $config */
 $config = require dirname(__DIR__) . '/bootstrap.php';
 require __DIR__ . '/support/auth_schema.php';
+require __DIR__ . '/support/master_schema.php';
+require __DIR__ . '/support/schedule_schema.php';
 
 /** @var array<int, array{label: string, passed: bool, detail: string}> $checks */
 $checks = [];
@@ -63,6 +65,10 @@ $configObject = new Config($testConfig);
 
 $database = new Database(['driver' => 'sqlite', 'database' => ':memory:']);
 auth_schema($database);
+// Phase 16: `/` is the dashboard, so the HTTP section needs the master-data
+// and schedule mirrors the dashboard reads.
+master_schema($database);
+schedule_schema($database);
 
 $roles = new RoleRepository($database);
 $permissions = new PermissionRepository($database);
@@ -360,7 +366,8 @@ check('the audit record names the route', (int) $database->scalar(
 $home = $kernel->handle(new Request('GET', '/'));
 check('the overview page renders for the administrator', $home->status() === 200);
 check('the navigation offers People when users.view is held', str_contains($home->body(), '/admin/users'));
-check('the overview lists the granted permissions', str_contains($home->body(), 'settings.manage'));
+check('the dashboard renders its scoped widget row', str_contains($home->body(), 'stat-grid')
+    && str_contains($home->body(), 'Scope: Institution-wide'));
 
 // ---------------------------------------------------------------------------
 // Report

@@ -4,6 +4,68 @@ All notable changes to SyncClass are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Phase 16 replaces the Phase 6 pipeline overview with the role-aware dashboard.
+
+### Added
+- `App\Repositories\AnalyticsRepository` — scoped dashboard aggregates: active
+  teacher/subject/room/section counts, meetings per department, today's
+  meetings (weekly plus one-off), a seven-day window and conflict counts. The
+  queries avoid MySQL-only functions so the dashboard runs on the SQLite test
+  mirror without shims.
+- `App\Services\DashboardService` — resolves the actor's audience
+  (institution / department / faculty), builds the widget row, expands today
+  and the next seven days from the recurring timetable, reuses
+  `ReportService` for workload and utilization so the numbers match the
+  reports, and returns Chart.js series from `charts()`.
+- `App\Controllers\DashboardController` — `GET /` (landing page for every
+  authenticated role) and `GET /api/dashboard` (`{ ok, data }`, `no-store`).
+- `app/Views/dashboard/index.php` — widget row, today's classes, seven-day
+  agenda, room-utilization meters, faculty workload, conflict counts,
+  department statistics and four chart canvases with an empty-term state.
+- `public/assets/js/vendor/chart.umd.min.js` — Chart.js 4.4.1 UMD build,
+  vendored locally because the CSP only permits `script-src 'self'`.
+- `public/assets/js/dashboard.js` — fetches the scoped series, renders the four
+  charts and degrades to a readable message if the library is unavailable. No
+  dataset is written into the view (DASH-03).
+- `public/assets/css/app.css` — dashboard tokens: stat cards, session lists,
+  utilization meters, conflict counts and chart cards.
+- `tests/dashboard_test.php` — 70 checks: audience scope isolation, the pinned
+  Monday agenda (including the one-off), utilization/workload/conflict reuse,
+  chart-series shape, empty term, term fallback and HTTP rendering for all
+  roles including the anonymous redirect.
+
+### Changed
+- `GET /` now renders the dashboard; `HomeController` and
+  `app/Views/home/index.php` (the Phase 6 pipeline demo) were removed.
+- `tests/core_framework_test.php`, `tests/auth_test.php` and
+  `tests/rbac_test.php` now build the master-data and schedule mirrors for the
+  kernel database, because the landing page reads the timetable; their old
+  "route table / permissions list" assertions were replaced with dashboard
+  assertions.
+
+### UI polish (Phase 17, NFR-08/NFR-09)
+- Shell: a skip link, a focusable `<main>` landmark, `aria-current="page"` on
+  the active section (the kernel now shares the route name with the view), a
+  mobile navigation toggle with `aria-expanded`, document theme colour and a
+  light colour-scheme declaration.
+- `public/assets/js/app.js` — dependency-free shell behaviour: the mobile nav
+  and a focus-managed modal for the Bootstrap markup the notifications page
+  uses (Bootstrap's JavaScript was never loaded, so that modal did nothing).
+- `public/assets/css/app.css` — component layer for the Bootstrap names the
+  views already used (`.btn-*`, `.form-select`, `.form-floating`, `.list-group`,
+  `.modal`, `.badge`, `.alert-*`, `.metric*`, layout utilities), a global
+  `:focus-visible` ring, 900 px navigation and 640 px layout breakpoints,
+  reduced-motion rules and print hiding for the new chrome.
+- `tests/ui_polish_test.php` — 28 structural checks for landmarks, assets and
+  the stylesheet contract.
+
+### Fixed
+- `ScheduleRepository::currentSemesterId()` read `['id']` from `null` when no
+  term was marked current (fresh install, empty dashboard), which emitted a
+  warning before the session started and broke the response headers.
+
 ## [1.1.0] — 2026-11-24
 
 Adds the reporting module (RPT-01…RPT-05): five read-only reports and a

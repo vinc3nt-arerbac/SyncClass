@@ -44,4 +44,28 @@ function schedule_schema(Database $database): void
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )'
     );
+
+    // UAT-2: approving an entry writes the teacher's in-app notification. The
+    // production table is in database/schema/SyncClass.sql; this mirror keeps
+    // the columns NotificationRepository::create() writes.
+    $database->pdo()->exec(
+        'CREATE TABLE notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NULL,
+            subject_type TEXT NULL,
+            subject_id INTEGER NULL,
+            action_url TEXT NULL,
+            channel TEXT NOT NULL DEFAULT "in_app",
+            is_read INTEGER NOT NULL DEFAULT 0,
+            read_at TEXT NULL,
+            email_status TEXT NOT NULL DEFAULT "none",
+            email_attempts INTEGER NOT NULL DEFAULT 0,
+            email_last_error TEXT NULL,
+            sent_at TEXT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )'
+    );
 }
