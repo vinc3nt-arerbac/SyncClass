@@ -203,6 +203,93 @@ final class AnalyticsRepository
     }
 
     /**
+     * Every visible meeting of the term, for the weekly timetable and the
+     * planning board.
+     *
+     * Unlike `classesOn()` this is not date-pinned: a weekly timetable shows the
+     * recurring pattern, so one row per weekly meeting is exactly one grid slot.
+     * One-off meetings are included as well and are placed on their weekday by
+     * the service. The room capacity and the section size travel with the row so
+     * the service can flag a full room without a second query.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function timetable(Scope $scope, int $semesterId): array
+    {
+        $bindings = ['semester_id' => $semesterId];
+        $scopeSql = $this->scopeSql($scope, $bindings, 's.department_id', 'f.user_id');
+
+        return $this->database->select(
+            "SELECT s.id, s.day_of_week, s.start_time, s.end_time, s.meeting_date,
+                    s.recurrence, s.status, s.published_at,
+                    sub.code AS subject_code, sub.title AS subject_title, sub.units,
+                    sec.code AS section_code, sec.student_count,
+                    r.id AS room_id, r.code AS room_code, r.capacity,
+                    b.code AS building_code, b.name AS building_name,
+                    f.id AS faculty_id,
+                    u.first_name AS faculty_first_name, u.last_name AS faculty_last_name,
+                    d.id AS department_id, d.code AS department_code,
+                    d.name AS department_name, d.color_hex
+               FROM schedules s
+               INNER JOIN subjects sub ON sub.id = s.subject_id
+               INNER JOIN sections sec ON sec.id = s.section_id
+               INNER JOIN faculty_profiles f ON f.id = s.faculty_id
+               INNER JOIN users u ON u.id = f.user_id
+               INNER JOIN rooms r ON r.id = s.room_id
+               INNER JOIN buildings b ON b.id = r.building_id
+               INNER JOIN departments d ON d.id = s.department_id
+              WHERE s.semester_id = :semester_id
+                AND s.status <> 'cancelled'
+                AND {$scopeSql}
+              ORDER BY s.day_of_week, s.start_time, sub.code",
+            $bindings
+        );
+    }
+
+    /**
+     * Active catalogue subjects that have no meeting in the term.
+     *
+     * This is the planning board's backlog: a real subject with no slot yet is
+     * work the scheduling office still has to do, which is a better backlog than
+     * an empty hand-written task list. A teacher's scope is themselves, so they
+     * have no catalogue backlog and the query returns nothing.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function unscheduledSubjects(Scope $scope, int $semesterId, int $limit): array
+    {
+        if ($scope->isSelfOnly()) {
+            return [];
+        }
+
+        $bindings = ['semester_id' => $semesterId];
+        // A cast int, never request input: PDO cannot bind LIMIT portably.
+        $rowLimit = max(1, $limit);
+        $where = 'sub.is_active = 1';
+
+        if ($scope->isDepartmental()) {
+            $bindings['scope_department_id'] = $scope->departmentId() ?? 0;
+            $where .= ' AND sub.department_id = :scope_department_id';
+        }
+
+        return $this->database->select(
+            "SELECT sub.id, sub.code, sub.title, sub.units,
+                    d.code AS department_code, d.name AS department_name, d.color_hex
+               FROM subjects sub
+               INNER JOIN departments d ON d.id = sub.department_id
+              WHERE {$where}
+                AND sub.id NOT IN (
+                      SELECT s.subject_id FROM schedules s
+                       WHERE s.semester_id = :semester_id
+                         AND s.status <> 'cancelled'
+                    )
+              ORDER BY d.code, sub.code
+              LIMIT {$rowLimit}",
+            $bindings
+        );
+    }
+
+    /**
      * Counts of persisted conflicts by status for the selected term.
      *
      * @return array{open: int, resolved: int, ignored: int, total: int}

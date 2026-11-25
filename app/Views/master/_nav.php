@@ -13,16 +13,7 @@
  * @var callable(string): bool $can
  */
 
-$links = [
-    ['route' => 'master.departments.index', 'permission' => 'departments.view', 'label' => 'Departments'],
-    ['route' => 'master.buildings.index', 'permission' => 'rooms.view', 'label' => 'Buildings'],
-    ['route' => 'master.rooms.index', 'permission' => 'rooms.view', 'label' => 'Rooms'],
-    ['route' => 'master.subjects.index', 'permission' => 'subjects.view', 'label' => 'Subjects'],
-    ['route' => 'master.sections.index', 'permission' => 'sections.view', 'label' => 'Sections'],
-    ['route' => 'master.faculty.index', 'permission' => 'faculty.view', 'label' => 'Faculty'],
-    ['route' => 'master.years.index', 'permission' => 'terms.view', 'label' => 'Years'],
-    ['route' => 'master.semesters.index', 'permission' => 'terms.view', 'label' => 'Semesters'],
-];
+$links = require __DIR__ . '/_nav-links.php';
 ?>
 <nav class="subnav" aria-label="Master data">
     <?php foreach ($links as $link): ?>

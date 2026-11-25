@@ -68,7 +68,7 @@ final class SubjectController extends MasterDataController
             'notice' => $this->notice($request),
             'can_create' => $this->authorization->can($user, 'subjects.create'),
             'can_edit' => $this->authorization->can($user, 'subjects.update'),
-            'can_archive' => $this->authorization->can($user, 'subjects.delete'),
+            'can_delete' => $this->authorization->can($user, 'subjects.delete'),
         ]);
     }
 

@@ -44,6 +44,20 @@ $navCurrent = static function (array $prefixes) use ($currentRoute): string {
 
     return '';
 };
+
+/**
+ * The Master data screens the signed-in user may open, filtered by the same
+ * permission their routes enforce. Shared with app/Views/master/_nav.php
+ * through _nav-links.php.
+ *
+ * @var array<int, array{route: string, permission: string, label: string}> $masterLinks
+ */
+$masterLinks = is_array($authUser)
+    ? array_values(array_filter(
+        require __DIR__ . '/../master/_nav-links.php',
+        static fn (array $link): bool => $can($link['permission'])
+    ))
+    : [];
 ?>
 <!doctype html>
 <html lang="en">
@@ -87,8 +101,26 @@ $navCurrent = static function (array $prefixes) use ($currentRoute): string {
             <a href="<?= $e($route('reports.index')) ?>"<?= $navCurrent(['reports']) ?>>Reports</a>
         <?php endif; ?>
 
-        <?php if (is_array($authUser) && $can('departments.view')): ?>
-            <a href="<?= $e($route('master.departments.index')) ?>"<?= $navCurrent(['master']) ?>>Master data</a>
+        <?php if ($masterLinks !== []): ?>
+            <div class="nav-menu" data-nav-menu data-open="false">
+                <button class="nav-menu-toggle<?= $navCurrent(['master']) !== '' ? ' is-current' : '' ?>"
+                        type="button" aria-expanded="false" aria-controls="master-menu">
+                    Master data
+                    <span class="nav-menu-caret" aria-hidden="true"></span>
+                </button>
+                <ul class="nav-menu-list" id="master-menu" hidden>
+                    <?php foreach ($masterLinks as $link): ?>
+                        <?php
+                        // Prefix match so the item also lights up on the
+                        // family's create/edit screens (master.subjects.edit, …).
+                        $prefix = substr($link['route'], 0, -strlen('.index'));
+                        ?>
+                        <li>
+                            <a href="<?= $e($route($link['route'])) ?>"<?= $navCurrent([$prefix]) ?>><?= $e($link['label']) ?></a>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
         <?php endif; ?>
 
         <?php if (is_array($authUser) && $can('users.view')): ?>
@@ -98,10 +130,10 @@ $navCurrent = static function (array $prefixes) use ($currentRoute): string {
         <a href="<?= $e($route('health')) ?>"<?= $navCurrent(['health']) ?>>Health</a>
 
         <?php if (is_array($authUser)): ?>
-            <span class="user-chip">
+            <a class="user-chip" href="<?= $e($route('account.password.edit')) ?>" title="Change your password">
                 <span class="user-name"><?= $e($authUser['first_name'] . ' ' . $authUser['last_name']) ?></span>
                 <span class="user-role"><?= $e($authUser['role_name'] ?? '') ?></span>
-            </span>
+            </a>
             <form class="logout-form" method="post" action="<?= $e($route('logout')) ?>">
                 <?= $csrf_field() ?>
                 <button type="submit" class="link-button">Sign out</button>

@@ -17,7 +17,7 @@
  * @var string|null $notice
  * @var bool $can_create
  * @var bool $can_edit
- * @var bool $can_archive
+ * @var bool $can_delete
  */
 
 $query = array_filter([
@@ -129,14 +129,19 @@ $pageUrl = static fn (int $page): string => $route('master.subjects.index') . '?
                         </td>
                         <td class="row-actions table-actions">
                             <?php if ($can_edit): ?>
-                                <a href="<?= $e($route('master.subjects.edit', ['id' => $subject['id']])) ?>">Edit</a>
+                                <a class="button button-small button-gold" href="<?= $e($route('master.subjects.edit', ['id' => $subject['id']])) ?>">Edit</a>
                             <?php endif; ?>
-                            <?php if ($can_archive): ?>
-                                <form class="inline-form" method="post" action="<?= $e($route('master.subjects.toggle', ['id' => $subject['id']])) ?>">
+                            <?php if ($can_delete): ?>
+                                <form class="inline-form"
+                                      method="post"
+                                      action="<?= $e($route('master.subjects.toggle', ['id' => $subject['id']])) ?>"
+                                      onsubmit="return confirm('Delete <?= $e($subject['code']) ?>? The subject will be archived and hidden from the active catalogue.');">
                                     <?= $csrf_field() ?>
-                                    <button type="submit" class="link-button">
-                                        <?= (int) $subject['is_active'] === 1 ? 'Archive' : 'Restore' ?>
-                                    </button>
+                                    <?php if ((int) $subject['is_active'] === 1): ?>
+                                        <button type="submit" class="button button-small">Delete</button>
+                                    <?php else: ?>
+                                        <button type="submit" class="button button-small button-secondary">Restore</button>
+                                    <?php endif; ?>
                                 </form>
                             <?php endif; ?>
                         </td>

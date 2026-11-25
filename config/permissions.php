@@ -238,7 +238,7 @@ return [
                 'users.view',
                 'departments.view',
                 'rooms.view', 'rooms.update',
-                'subjects.view',
+                'subjects.view', 'subjects.delete',
                 'sections.view',
                 'faculty.view',
                 'availability.view',

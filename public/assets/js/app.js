@@ -38,6 +38,10 @@
         function setOpen(open) {
             nav.classList.toggle('is-open', open);
             toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+
+            if (!open) {
+                closeNavMenus(null);
+            }
         }
 
         toggle.addEventListener('click', function () {
@@ -158,8 +162,132 @@
         });
     }
 
+    // ---------------------------------------------------------------------
+    // Master-data disclosure menu
+    //
+    // A plain disclosure: a button that shows a list of links. ArrowDown /
+    // ArrowUp open it and land on the first / last item, Escape closes it and
+    // returns focus to the button, and moving focus out of the widget folds it
+    // away again. No ARIA menu roles, because the contents are ordinary links.
+    // ---------------------------------------------------------------------
+    var navMenus = [];
+
+    function setNavMenu(menu, open) {
+        menu.setAttribute('data-open', open ? 'true' : 'false');
+        menu.querySelector('.nav-menu-toggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+        menu.querySelector('.nav-menu-list').hidden = !open;
+    }
+
+    function closeNavMenus(except) {
+        navMenus.forEach(function (menu) {
+            if (menu !== except) {
+                setNavMenu(menu, false);
+            }
+        });
+    }
+
+    function initNavMenus() {
+        Array.prototype.forEach.call(document.querySelectorAll('[data-nav-menu]'), function (menu) {
+            var toggle = menu.querySelector('.nav-menu-toggle');
+            var list = menu.querySelector('.nav-menu-list');
+
+            if (toggle === null || list === null) {
+                return;
+            }
+
+            navMenus.push(menu);
+
+            function links() {
+                return Array.prototype.slice.call(list.querySelectorAll('a[href]'));
+            }
+
+            function open(focusIndex) {
+                closeNavMenus(menu);
+                setNavMenu(menu, true);
+
+                var items = links();
+                if (typeof focusIndex === 'number' && items.length > 0) {
+                    items[focusIndex < 0 ? items.length - 1 : focusIndex].focus();
+                }
+            }
+
+            toggle.addEventListener('click', function () {
+                if (toggle.getAttribute('aria-expanded') === 'true') {
+                    setNavMenu(menu, false);
+                    return;
+                }
+
+                open();
+            });
+
+            toggle.addEventListener('keydown', function (event) {
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    open(event.key === 'ArrowDown' ? 0 : -1);
+                }
+            });
+
+            menu.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
+                    // Stop here, so the small-screen Escape that closes the
+                    // whole nav does not also fire on this keystroke.
+                    event.stopPropagation();
+                    setNavMenu(menu, false);
+                    toggle.focus();
+                    return;
+                }
+
+                var current = event.target.closest('a');
+                var items = links();
+                var index = current === null ? -1 : items.indexOf(current);
+
+                if (index === -1) {
+                    return;
+                }
+
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    items[(index + 1) % items.length].focus();
+                } else if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    items[(index - 1 + items.length) % items.length].focus();
+                } else if (event.key === 'Home') {
+                    event.preventDefault();
+                    items[0].focus();
+                } else if (event.key === 'End') {
+                    event.preventDefault();
+                    items[items.length - 1].focus();
+                } else if (event.key === 'Tab' && index === (event.shiftKey ? 0 : items.length - 1)) {
+                    // Tabbing past either end leaves the widget: fold it away so
+                    // the next link is not hidden behind an open panel.
+                    setNavMenu(menu, false);
+                }
+            });
+
+            // Focus or a click landing outside closes the panel.
+            menu.addEventListener('focusout', function (event) {
+                if (event.relatedTarget !== null && !menu.contains(event.relatedTarget)) {
+                    setNavMenu(menu, false);
+                }
+            });
+
+            list.addEventListener('click', function (event) {
+                if (event.target.closest('a') !== null) {
+                    setNavMenu(menu, false);
+                }
+            });
+        });
+
+        document.addEventListener('click', function (event) {
+            if (event.target.closest('[data-nav-menu]') === null) {
+                closeNavMenus(null);
+            }
+        });
+    }
+
     onReady(function () {
         initNavigation();
+        initNavMenus();
         initModals();
     });
 })();

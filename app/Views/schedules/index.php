@@ -13,6 +13,7 @@
  * @var callable(): string $csrf_field
  * @var array<int, array<string, mixed>> $schedules
  * @var array{search: string, semester_id: mixed, status: string, department_id: mixed, day_of_week: mixed, sort: string, direction: string} $filters
+ * @var array<int, array{id: int, code: string, name: string}> $departments
  * @var array<int, array{id: int, code: string, name: string, status: string, year_code: string}> $semesters
  * @var array<int, string> $statuses
  * @var array<int, string> $days

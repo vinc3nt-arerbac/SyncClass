@@ -48,6 +48,29 @@ final class DashboardService
     /** DASH colours keep the maroon/gold identity even when a department has no colour. */
     private const FALLBACK_COLORS = ['#8c1d40', '#c9a227', '#6d1531', '#1f7a4d', '#8a6100', '#4b3a2f'];
 
+    /** ISO weekday → English label, for the weekly timetable columns. */
+    private const DAY_LABELS = [
+        1 => 'Monday',
+        2 => 'Tuesday',
+        3 => 'Wednesday',
+        4 => 'Thursday',
+        5 => 'Friday',
+        6 => 'Saturday',
+        7 => 'Sunday',
+    ];
+
+    /** Cards a planning-board column renders before folding the rest into "+N". */
+    private const BOARD_CARDS = 4;
+
+    /** Unscheduled catalogue subjects the backlog column reads. */
+    private const BACKLOG_LIMIT = 24;
+
+    /** Room fill at or above this share is shown as a tight room. */
+    private const TIGHT_FILL = 95.0;
+
+    /** Conflict items the watch panel lists; the counters keep the real totals. */
+    private const ALERT_LIMIT = 5;
+
     public function __construct(
         private readonly AnalyticsRepository $analytics,
         private readonly ReportService $reports,
@@ -100,6 +123,11 @@ final class DashboardService
             : $this->reports->roomUtilization($authUser, $semesterId);
 
         $roomRows = $this->topRooms($utilization['rows']);
+        $weekRows = $semesterId === null ? [] : $this->analytics->timetable($scope, $semesterId);
+        $alerts = $this->alerts($weekRows);
+        $backlog = $semesterId === null
+            ? []
+            : $this->analytics->unscheduledSubjects($scope, $semesterId, self::BACKLOG_LIMIT);
 
         return [
             'context' => $context,
@@ -132,6 +160,11 @@ final class DashboardService
                 'rows' => array_slice($workload['rows'], 0, self::WORKLOAD_LIMIT),
                 'totals' => $workload['totals'],
             ],
+            'week' => $this->week($weekRows, $today, $alerts['flags']),
+            'alerts' => $alerts,
+            'occupancy' => $this->occupancy($weekRows),
+            'buildings' => $this->buildings($utilization['buildings'] ?? []),
+            'board' => $this->board($weekRows, $backlog),
         ];
     }
 
@@ -444,6 +477,444 @@ final class DashboardService
         }
 
         return $classes;
+    }
+
+    /**
+     * The weekly timetable: day columns, time bands and one cell per band.
+     *
+     * Bands are the distinct start/end pairs the term actually uses, so the grid
+     * never invents half-hour rows nobody teaches in. Every session carries the
+     * `flag` the alert pass gave it, which the view turns into a red or amber
+     * outline — the conflict indicator on the timeline itself.
+     *
+     * @param array<int, array<string, mixed>> $rows
+     * @param array<int, string> $flags
+     * @return array<string, mixed>
+     */
+    private function week(array $rows, DateTimeImmutable $today, array $flags): array
+    {
+        $monday = $today->modify('-' . ((int) $today->format('N') - 1) . ' days');
+        $present = [];
+
+        foreach ($rows as $row) {
+            $day = (int) $row['day_of_week'];
+
+            if (isset(self::DAY_LABELS[$day])) {
+                $present[$day] = true;
+            }
+        }
+
+        // Monday to Friday are the teaching week even when a term is empty: an
+        // empty grid with its columns is more legible than no grid at all.
+        for ($day = 1; $day <= 5; $day++) {
+            $present[$day] = true;
+        }
+
+        ksort($present);
+        $days = [];
+
+        foreach (array_keys($present) as $day) {
+            $date = $monday->modify('+' . ($day - 1) . ' days');
+            $days[$day] = [
+                'index' => $day,
+                'short' => substr(self::DAY_LABELS[$day], 0, 3),
+                'label' => self::DAY_LABELS[$day],
+                'date' => $date->format('Y-m-d'),
+                'date_label' => $date->format('j M'),
+                'is_today' => $date->format('Y-m-d') === $today->format('Y-m-d'),
+                'count' => 0,
+                'alerts' => 0,
+            ];
+        }
+
+        $bands = [];
+        $cells = [];
+
+        foreach ($rows as $row) {
+            $day = (int) $row['day_of_week'];
+
+            if (!isset($days[$day])) {
+                continue;
+            }
+
+            $start = substr((string) $row['start_time'], 0, 5);
+            $end = substr((string) $row['end_time'], 0, 5);
+            $key = $start . '|' . $end;
+            $session = $this->session($row, $flags);
+
+            $bands[$key] = ['key' => $key, 'start' => $start, 'end' => $end];
+            $cells[$day][$key][] = $session;
+            $days[$day]['count']++;
+
+            if ($session['flag'] !== null) {
+                $days[$day]['alerts']++;
+            }
+        }
+
+        uasort(
+            $bands,
+            static fn (array $a, array $b): int => [$a['start'], $a['end']] <=> [$b['start'], $b['end']]
+        );
+
+        foreach ($cells as $day => $byBand) {
+            foreach ($byBand as $key => $list) {
+                usort(
+                    $list,
+                    static fn (array $a, array $b): int => [$a['start'], $a['code']] <=> [$b['start'], $b['code']]
+                );
+                $cells[$day][$key] = $list;
+            }
+        }
+
+        $peak = null;
+
+        foreach ($days as $day) {
+            if ($peak === null || $day['count'] > $peak['count']) {
+                $peak = ['label' => $day['label'], 'short' => $day['short'], 'count' => $day['count']];
+            }
+        }
+
+        return [
+            'label' => $monday->format('j M') . ' – ' . $monday->modify('+4 days')->format('j M Y'),
+            'monday' => $monday->format('Y-m-d'),
+            'days' => array_values($days),
+            'bands' => array_values($bands),
+            'cells' => $cells,
+            'total' => count($rows),
+            'peak' => $peak,
+        ];
+    }
+
+    /**
+     * One timetable card, already shaped for the grid.
+     *
+     * @param array<string, mixed> $row
+     * @param array<int, string> $flags
+     * @return array<string, mixed>
+     */
+    private function session(array $row, array $flags): array
+    {
+        $id = (int) $row['id'];
+
+        return [
+            'id' => $id,
+            'code' => (string) $row['subject_code'],
+            'title' => (string) $row['subject_title'],
+            'section' => (string) $row['section_code'],
+            'room' => (string) $row['room_code'],
+            'building' => (string) $row['building_code'],
+            'faculty' => trim((string) $row['faculty_first_name'] . ' ' . (string) $row['faculty_last_name']),
+            'faculty_last' => (string) $row['faculty_last_name'],
+            'department' => (string) $row['department_code'],
+            'color' => $this->color((string) ($row['color_hex'] ?? ''), 0),
+            'start' => substr((string) $row['start_time'], 0, 5),
+            'end' => substr((string) $row['end_time'], 0, 5),
+            'fill' => $this->fill($row),
+            'flag' => $flags[$id] ?? null,
+            'status' => (string) $row['status'],
+        ];
+    }
+
+    /**
+     * Seats taken as a whole-revealed percentage, or null for a room with no
+     * capacity on record.
+     *
+     * @param array<string, mixed> $row
+     */
+    private function fill(array $row): ?int
+    {
+        $capacity = (int) ($row['capacity'] ?? 0);
+
+        if ($capacity <= 0) {
+            return null;
+        }
+
+        return (int) round(((int) ($row['student_count'] ?? 0)) / $capacity * 100);
+    }
+
+    /**
+     * Clash and capacity checks over the whole term timetable.
+     *
+     * Three findings, all computed from the live rows rather than read from the
+     * conflict log: two meetings in one room at one time, one teacher in two
+     * rooms at one time, and a section larger than its room. The `flags` map is
+     * returned so the timetable can outline exactly the cards that are involved.
+     *
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<string, mixed>
+     */
+    private function alerts(array $rows): array
+    {
+        $items = [];
+        $flags = [];
+        $counts = ['room_overlap' => 0, 'faculty_overlap' => 0, 'over_capacity' => 0, 'tight' => 0];
+
+        foreach ([
+            ['room', 'room_id', 'room_overlap', 'Room double-booked'],
+            ['faculty', 'faculty_id', 'faculty_overlap', 'Teacher double-booked'],
+        ] as [$kind, $column, $bucket, $label]) {
+            $groups = [];
+
+            foreach ($rows as $row) {
+                $groups[(int) $row['day_of_week'] . '|' . (int) $row[$column]][] = $row;
+            }
+
+            foreach ($groups as $group) {
+                usort(
+                    $group,
+                    static fn (array $a, array $b): int => (string) $a['start_time'] <=> (string) $b['start_time']
+                );
+
+                $previous = null;
+                $previousEnd = null;
+
+                foreach ($group as $row) {
+                    $start = $this->minutes((string) $row['start_time']);
+                    $end = $this->minutes((string) $row['end_time']);
+
+                    if ($start === null || $end === null) {
+                        continue;
+                    }
+
+                    if ($previous !== null && $previousEnd !== null && $start < $previousEnd) {
+                        $counts[$bucket]++;
+                        $flags[(int) $previous['id']] = 'danger';
+                        $flags[(int) $row['id']] = 'danger';
+                        $items[] = [
+                            'type' => $bucket,
+                            'severity' => 'danger',
+                            'title' => $kind === 'room'
+                                ? $label . ' · ' . $row['building_code'] . ' ' . $row['room_code']
+                                : $label . ' · ' . trim((string) $row['faculty_first_name'] . ' ' . (string) $row['faculty_last_name']),
+                            'detail' => $previous['subject_code'] . ' (' . $previous['section_code'] . ') overlaps '
+                                . $row['subject_code'] . ' (' . $row['section_code'] . ')',
+                            'when' => $this->dayShort((int) $row['day_of_week']) . ' '
+                                . substr((string) $row['start_time'], 0, 5) . '–' . substr((string) $row['end_time'], 0, 5),
+                            'ids' => [(int) $previous['id'], (int) $row['id']],
+                        ];
+                    }
+
+                    if ($previousEnd === null || $end > $previousEnd) {
+                        $previous = $row;
+                        $previousEnd = $end;
+                    }
+                }
+            }
+        }
+
+        foreach ($rows as $row) {
+            $capacity = (int) ($row['capacity'] ?? 0);
+            $students = (int) ($row['student_count'] ?? 0);
+
+            if ($capacity <= 0) {
+                continue;
+            }
+
+            $share = $students / $capacity * 100.0;
+
+            if ($students > $capacity) {
+                $counts['over_capacity']++;
+                $flags[(int) $row['id']] = 'danger';
+                $items[] = [
+                    'type' => 'over_capacity',
+                    'severity' => 'danger',
+                    'title' => 'Over capacity · ' . $row['building_code'] . ' ' . $row['room_code'],
+                    'detail' => $row['subject_code'] . ' · ' . $row['section_code'] . ' needs ' . $students
+                        . ' seats, the room holds ' . $capacity,
+                    'when' => $this->dayShort((int) $row['day_of_week']) . ' '
+                        . substr((string) $row['start_time'], 0, 5) . '–' . substr((string) $row['end_time'], 0, 5),
+                    'ids' => [(int) $row['id']],
+                ];
+            } elseif ($share >= self::TIGHT_FILL) {
+                $counts['tight']++;
+                $flags[(int) $row['id']] = 'warning';
+                $items[] = [
+                    'type' => 'tight',
+                    'severity' => 'warning',
+                    'title' => 'Room nearly full · ' . $row['building_code'] . ' ' . $row['room_code'],
+                    'detail' => $row['subject_code'] . ' · ' . $row['section_code'] . ' fills ' . (int) round($share)
+                        . '% of the seats',
+                    'when' => $this->dayShort((int) $row['day_of_week']) . ' '
+                        . substr((string) $row['start_time'], 0, 5) . '–' . substr((string) $row['end_time'], 0, 5),
+                    'ids' => [(int) $row['id']],
+                ];
+            }
+        }
+
+        usort(
+            $items,
+            static fn (array $a, array $b): int => [$a['severity'] === 'danger' ? 0 : 1, $a['when']]
+                <=> [$b['severity'] === 'danger' ? 0 : 1, $b['when']]
+        );
+
+        $danger = $counts['room_overlap'] + $counts['faculty_overlap'] + $counts['over_capacity'];
+
+        return [
+            'items' => array_slice($items, 0, self::ALERT_LIMIT),
+            'counts' => $counts,
+            'danger' => $danger,
+            'warning' => $counts['tight'],
+            'total' => $danger + $counts['tight'],
+            'flags' => $flags,
+            'checks' => [
+                ['label' => 'Room double-bookings', 'count' => $counts['room_overlap']],
+                ['label' => 'Teacher double-bookings', 'count' => $counts['faculty_overlap']],
+                ['label' => 'Sessions over room capacity', 'count' => $counts['over_capacity']],
+                ['label' => 'Rooms at 95% of seats or more', 'count' => $counts['tight']],
+            ],
+        ];
+    }
+
+    /**
+     * Seat occupancy across the term: students seated against seats available.
+     *
+     * @param array<int, array<string, mixed>> $rows
+     * @return array{percent: float, students: int, seats: int, sessions: int}
+     */
+    private function occupancy(array $rows): array
+    {
+        $students = 0;
+        $seats = 0;
+
+        foreach ($rows as $row) {
+            $students += (int) ($row['student_count'] ?? 0);
+            $seats += (int) ($row['capacity'] ?? 0);
+        }
+
+        return [
+            'percent' => $seats > 0 ? round($students / $seats * 100.0, 1) : 0.0,
+            'students' => $students,
+            'seats' => $seats,
+            'sessions' => count($rows),
+        ];
+    }
+
+    /**
+     * The per-building utilisation rollup, trimmed to what the panel prints.
+     *
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildings(array $rows): array
+    {
+        $buildings = [];
+
+        foreach ($rows as $row) {
+            $buildings[] = [
+                'code' => (string) $row['building_code'],
+                'name' => (string) $row['building_name'],
+                'rooms' => (int) $row['rooms'],
+                'meetings' => (int) $row['meetings'],
+                'booked_hours' => (float) $row['booked_hours'],
+                'available_hours' => (float) $row['available_hours'],
+                'utilization' => (float) $row['utilization'],
+                'band' => (float) $row['utilization'] >= 75.0 ? 'high' : ((float) $row['utilization'] < 40.0 ? 'low' : 'balanced'),
+            ];
+        }
+
+        return $buildings;
+    }
+
+    /**
+     * The planning board: four workflow columns built from the schedule rows.
+     *
+     * The board is not a second source of truth. "Needs a slot" is the real
+     * catalogue backlog (active subjects with no meeting), the middle columns are
+     * the scheduling statuses the timetable already carries, and "Published" is
+     * the last step of the same workflow. That keeps the board honest for the
+     * selected term instead of showing invented tasks.
+     *
+     * @param array<int, array<string, mixed>> $rows
+     * @param array<int, array<string, mixed>> $backlog
+     * @return array<string, mixed>
+     */
+    private function board(array $rows, array $backlog): array
+    {
+        $groups = ['draft' => [], 'approved' => [], 'published' => []];
+
+        foreach ($rows as $row) {
+            $status = (string) $row['status'];
+            $groups[$status === 'published' ? 'published' : ($status === 'approved' ? 'approved' : 'draft')][] = $row;
+        }
+
+        foreach ($groups as $key => $list) {
+            usort(
+                $list,
+                static fn (array $a, array $b): int => [(int) $a['day_of_week'], (string) $a['start_time']]
+                    <=> [(int) $b['day_of_week'], (string) $b['start_time']]
+            );
+            $groups[$key] = $list;
+        }
+
+        $backlogCards = [];
+
+        foreach ($backlog as $subject) {
+            $backlogCards[] = [
+                'code' => (string) $subject['code'],
+                'title' => (string) $subject['title'],
+                'meta' => (string) $subject['department_code'] . ' · ' . $this->units($subject['units']) . ' units',
+                'color' => $this->color((string) ($subject['color_hex'] ?? ''), 0),
+                'badge' => null,
+            ];
+        }
+
+        $columns = [[
+            'key' => 'to_schedule',
+            'label' => 'Needs a slot',
+            'tone' => 'amber',
+            'count' => count($backlogCards),
+            'cards' => array_slice($backlogCards, 0, self::BOARD_CARDS),
+            'more' => max(0, count($backlogCards) - self::BOARD_CARDS),
+            'empty' => 'Every active subject already has a meeting this term.',
+        ]];
+
+        foreach ([
+            'draft' => ['label' => 'In review', 'tone' => 'violet', 'empty' => 'No draft or pending meeting is waiting for review.'],
+            'approved' => ['label' => 'Approved', 'tone' => 'green', 'empty' => 'Nothing is approved for this term yet.'],
+            'published' => ['label' => 'Published', 'tone' => 'blue', 'empty' => 'Approved meetings appear here once published.'],
+        ] as $key => $meta) {
+            $cards = [];
+
+            foreach (array_slice($groups[$key], 0, self::BOARD_CARDS) as $row) {
+                $cards[] = [
+                    'code' => (string) $row['subject_code'],
+                    'title' => (string) $row['section_code'] . ' · ' . $row['room_code'] . ' ' . $row['building_code'],
+                    'meta' => $this->dayShort((int) $row['day_of_week']) . ' '
+                        . substr((string) $row['start_time'], 0, 5) . ' · ' . $row['faculty_last_name']
+                        . ' · ' . $this->units($row['units']) . 'u',
+                    'color' => $this->color((string) ($row['color_hex'] ?? ''), 0),
+                    'badge' => $this->fill($row) !== null ? $this->fill($row) . '% full' : null,
+                ];
+            }
+
+            $columns[] = [
+                'key' => $key,
+                'label' => $meta['label'],
+                'tone' => $meta['tone'],
+                'count' => count($groups[$key]),
+                'cards' => $cards,
+                'more' => max(0, count($groups[$key]) - self::BOARD_CARDS),
+                'empty' => $meta['empty'],
+            ];
+        }
+
+        return ['columns' => $columns, 'total' => count($rows), 'backlog' => count($backlog)];
+    }
+
+    /**
+     * A credit count without the trailing `.0`.
+     */
+    private function units(mixed $units): string
+    {
+        return rtrim(rtrim(number_format((float) $units, 1, '.', ''), '0'), '.');
+    }
+
+    /**
+     * Mon, Tue … for inline metadata.
+     */
+    private function dayShort(int $day): string
+    {
+        return isset(self::DAY_LABELS[$day]) ? substr(self::DAY_LABELS[$day], 0, 3) : '—';
     }
 
     /**

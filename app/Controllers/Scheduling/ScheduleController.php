@@ -12,6 +12,7 @@ use App\Core\Response;
 use App\Core\Router;
 use App\Core\View;
 use App\Repositories\AuditRepository;
+use App\Repositories\DepartmentRepository;
 use App\Repositories\FacultyRepository;
 use App\Repositories\RoomRepository;
 use App\Repositories\ScheduleRepository;
@@ -50,6 +51,7 @@ final class ScheduleController extends Controller
         private readonly FacultyRepository $faculty,
         private readonly RoomRepository $rooms,
         private readonly TermRepository $terms,
+        private readonly DepartmentRepository $departments,
         private readonly ScheduleService $service,
         private readonly AuthorizationService $authorization,
         private readonly AuditRepository $audit,
@@ -85,6 +87,7 @@ final class ScheduleController extends Controller
             'semesters' => $this->terms->semesterOptions(),
             'statuses' => ScheduleRepository::STATUSES,
             'days' => (array) $this->config->get('schedule.days', []),
+            'departments' => $this->departments->options($scope),
             'current_semester' => $term,
             'page' => $page,
             'per_page' => $perPage,

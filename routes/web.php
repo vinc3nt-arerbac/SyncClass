@@ -30,6 +30,7 @@ declare(strict_types=1);
  * @var callable(App\Core\Router, App\Core\Container): void $register
  */
 
+use App\Controllers\AccountController;
 use App\Controllers\AuthController;
 use App\Controllers\CalendarController;
 use App\Controllers\DashboardController;
@@ -66,6 +67,18 @@ return static function (Router $router, Container $container): void {
     // POST only: a GET sign-out link would be forgeable from any page.
     $router->post('/logout', [AuthController::class, 'logout'], ['auth'], 'Sign-out')
         ->name('logout');
+
+    // -----------------------------------------------------------------------
+    // Private: account self-service (AUTH-02). No permission gate: every
+    // signed-in user may rotate their own password, and the controller always
+    // acts on the row the auth middleware resolved — never on an id from the
+    // request — so there is nothing to scope.
+    // -----------------------------------------------------------------------
+    $router->get('/account/password', [AccountController::class, 'edit'], ['auth'], 'Change password')
+        ->name('account.password.edit');
+
+    $router->post('/account/password', [AccountController::class, 'update'], ['auth'], 'Update password')
+        ->name('account.password.update');
 
     // -----------------------------------------------------------------------
     // Public: diagnostics

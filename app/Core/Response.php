@@ -136,7 +136,14 @@ final class Response
             http_response_code($this->status);
 
             foreach ($this->headers as $name => $value) {
-                header($name . ': ' . $value, true);
+                // Set-Cookie must be appended, never replaced: PHP's session
+                // module adds its own Set-Cookie header at shutdown, and
+                // replacing the header here would drop the session cookie.
+                // The browser would then keep an ID whose file was deleted by
+                // session_regenerate_id(true) — GETs still work through
+                // remember-me, but every POST fails CSRF with 419.
+                $append = strcasecmp($name, 'Set-Cookie') === 0;
+                header($name . ': ' . $value, !$append);
             }
         }
 
