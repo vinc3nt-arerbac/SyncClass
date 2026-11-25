@@ -41,10 +41,42 @@ Academic Planning System
 
 It must NOT feel like a generic CRUD system.
 
+PROJECT STATUS
+
+As of 2026-11-25 the SyncClass codebase is feature-complete for v1.1.0 plus the Phase 16 dashboard rebuild and Phase 17 UI polish. Phases 1-19 are implemented and verified by the automated test suites; Phase 20 (deployment packaging) is partially complete (INSTALL.md, export-sql and seeders exist).
+
+Completed phases:
+- Phase 1 Requirements Analysis - docs/REQUIREMENTS.md
+- Phase 2 Architecture Design - docs/ARCHITECTURE.md
+- Phase 3 Database Design - docs/DATABASE.md, migrations, ERD
+- Phase 4 Folder Structure - native MVC scaffold
+- Phase 5 Security Architecture - docs/SECURITY.md, security primitives
+- Phase 6 Core MVC Framework - kernel, router, middleware, DB wrapper
+- Phase 7 Authentication - login, throttle, remember-me, CSRF rotation
+- Phase 8 RBAC - 48 permissions, 4 roles, scope
+- Phase 9 Master Data Modules - departments, buildings, rooms, subjects, sections, faculty, terms
+- Phase 10 Scheduling Engine - ScheduleService, lifecycle, policy
+- Phase 11 Conflict Detection - ConflictService, alternatives
+- Phase 12 Calendar System - FullCalendar feed, recurring occurrences
+- Phase 13 AI Timetable Generator - deterministic generator
+- Phase 14 Notifications - in-app plus email dispatcher
+- Phase 15 Reports - 6 reports, print-friendly timetable
+- Phase 16 Dashboard Analytics - role-aware command centre (rebuilt)
+- Phase 17 UI Polish - accessibility, responsive, focus rings
+- Phase 18 Testing - rule suites (security, core, auth, rbac, master, schedule, calendar, reports, dashboard, ui_polish)
+- Phase 19 Seed Data - bin/seed-demo.php, syncclass_complete.sql
+
+Remaining / known limitations:
+- Phase 20 Deployment Package: final packaging and deployment notes still in progress.
+- RPT-06 PDF/Excel export not implemented (reports are print-friendly only).
+- Failed schedule/master-data validation renders the 422 page instead of re-rendering the form with submitted values.
+- Email delivery requires SMTP credentials in .env; otherwise in-app only.
+- Pre-existing ui_polish_test path-casing mismatch (APP_URL casing) is unrelated to the dashboard.
+
 TECHNOLOGY STACK
 Backend
 
-PHP 8.x
+PHP 8.2
 
 Requirements:
 
@@ -716,45 +748,45 @@ GENERATION STRATEGY
 
 Work in the following sequence:
 
-Phase 1: Requirements Analysis
+Phase 1: Requirements Analysis (complete)
 
-Phase 2: Architecture Design
+Phase 2: Architecture Design (complete)
 
-Phase 3: Database Design
+Phase 3: Database Design (complete)
 
-Phase 4: Folder Structure
+Phase 4: Folder Structure (complete)
 
-Phase 5: Security Architecture
+Phase 5: Security Architecture (complete)
 
-Phase 6: Core MVC Framework
+Phase 6: Core MVC Framework (complete)
 
-Phase 7: Authentication
+Phase 7: Authentication (complete)
 
-Phase 8: RBAC
+Phase 8: RBAC (complete)
 
-Phase 9: Master Data Modules
+Phase 9: Master Data Modules (complete)
 
-Phase 10: Scheduling Engine
+Phase 10: Scheduling Engine (complete)
 
-Phase 11: Conflict Detection
+Phase 11: Conflict Detection (complete)
 
-Phase 12: Calendar System
+Phase 12: Calendar System (complete)
 
-Phase 13: AI Timetable Generator
+Phase 13: AI Timetable Generator (complete)
 
-Phase 14: Notifications
+Phase 14: Notifications (complete)
 
-Phase 15: Reports
+Phase 15: Reports (complete)
 
-Phase 16: Dashboard Analytics
+Phase 16: Dashboard Analytics (complete)
 
-Phase 17: UI Polish
+Phase 17: UI Polish (complete)
 
-Phase 18: Testing
+Phase 18: Testing (complete)
 
-Phase 19: Seed Data
+Phase 19: Seed Data (complete)
 
-Phase 20: Deployment Package
+Phase 20: Deployment Package (in progress)
 
 OUTPUT REQUIREMENTS
 
@@ -775,7 +807,4 @@ At every step act as a lead architect reviewing your own work.
 Ensure all generated code is production-ready, secure, maintainable, and deployable on XAMPP and shared hosting environments.
 
 PHASED IMPLEMENTATION WORKFLOW
-The system must be developed incrementally.
-Do NOT generate the entire project at once.
-Each phase must be reviewed and approved before moving forward.
-The objective is to emulate a professional software engineering lifecycle and prevent architectural drift.
+The system has been developed incrementally through Phases 1-19 (see PROJECT STATUS). Phase 20 (deployment packaging) is in progress. Incremental, reviewable changes remain the working style for any further work; do not regenerate the entire project at once.
