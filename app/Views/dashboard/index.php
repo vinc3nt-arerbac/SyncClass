@@ -124,6 +124,9 @@ $cards[] = [
                 <?php if ($can('reports.view')): ?>
                     <a class="dash-btn" href="<?= $e($route('reports.index')) ?>">Reports</a>
                 <?php endif; ?>
+                <?php if ($can('schedules.view')): ?>
+                    <a class="dash-btn" href="<?= $e($route('analytics.index')) ?>">Advanced analytics</a>
+                <?php endif; ?>
             </div>
         </div>
     </header>

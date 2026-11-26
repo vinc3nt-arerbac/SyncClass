@@ -281,6 +281,17 @@ final class DashboardService
     }
 
     /**
+     * Room-focused utilisation read model for the advanced analytics view:
+     * per-room bookings, occupancy and the building rollup, scoped to the actor.
+     *
+     * @return array<string, mixed>
+     */
+    public function roomUtilization(array $authUser, ?int $semesterId): array
+    {
+        return $this->reports->roomUtilization($authUser, $semesterId);
+    }
+
+    /**
      * The audience keyword the view switches on (DASH-02).
      */
     public function audience(Scope $scope): string

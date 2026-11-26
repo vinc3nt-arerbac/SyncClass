@@ -2601,3 +2601,34 @@ a.user-chip:focus-visible .user-name {
 @media (max-width: 520px) {
     .dash-stats { grid-template-columns: 1fr; }
 }
+
+/* Advanced analytics: rooms by building */
+.dash-room-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+.dash-room-card { background: #fff; border: 1px solid #e6e1d8; border-radius: 12px; padding: 1rem; box-shadow: var(--card-shadow, 0 10px 30px rgb(43 33 24 / 7%)); }
+.dash-room-head { display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; margin-bottom: .5rem; }
+.dash-room-head strong { display: block; color: var(--primary-maroon, #8c1d40); }
+.dash-room-meta { display: flex; gap: .4rem; flex-wrap: wrap; }
+.dash-room-sessions { list-style: none; margin: .5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; }
+.dash-room-session { display: flex; flex-direction: column; gap: .15rem; padding: .45rem .55rem; border-left: 3px solid var(--primary-gold, #c9a227); background: #faf7f2; border-radius: 6px; font-size: .85rem; }
+.dash-room-session.is-danger { border-left-color: #b02a37; background: #fdecea; }
+.dash-room-session.is-warning { border-left-color: #b7791f; background: #fdf3e3; }
+.dash-room-time { font-weight: 600; color: var(--primary-maroon, #8c1d40); }
+.dash-room-subject { display: flex; gap: .35rem; align-items: baseline; }
+.dash-room-detail { color: #5b5148; font-size: .8rem; }
+
+/* Advanced analytics: vacant-room timetable */
+.dash-table-wrap { overflow: auto; }
+.dash-vacant-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.dash-vacant-table th, .dash-vacant-table td { border: 1px solid #e6e1d8; padding: .5rem; vertical-align: top; }
+.dash-vacant-table thead th { background: #faf7f2; text-align: center; }
+.dash-vacant-timecol { background: #faf7f2; white-space: nowrap; }
+.dash-vacant-cell { min-width: 150px; }
+.dash-vacant-count { font-weight: 600; color: var(--primary-maroon, #8c1d40); margin-bottom: .35rem; font-size: .8rem; }
+.dash-vacant-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .25rem; }
+.dash-vacant-room { display: inline-flex; align-items: center; gap: .2rem; padding: .15rem .4rem; border-radius: 6px; background: #eaf4ea; color: #1f5e2f; font-size: .78rem; }
+.dash-vacant-bldg { font-weight: 700; }
+
+/* Advanced analytics: department colour key (shown inside the availability grid) */
+.dash-dept-legend { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; }
+.dash-dept-legend li { display: inline-flex; align-items: center; gap: .4rem; font-size: .85rem; }
+.dash-dept-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; flex: 0 0 auto; }

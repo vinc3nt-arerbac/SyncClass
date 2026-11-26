@@ -1072,11 +1072,11 @@ INSERT INTO `role_permissions` (`role_id`, `permission_id`, `created_at`) VALUES
 -- departments (5 rows)
 -- ----------------------------------------------------------------------
 INSERT INTO `departments` (`id`, `code`, `name`, `short_name`, `dean_user_id`, `email`, `phone`, `color_hex`, `is_active`, `created_at`, `updated_at`) VALUES
-    (1, 'CSM', 'College of Computer Science & Engineering', 'CSE', 2, 'csm@sac.edu.ph', NULL, '#1B4F72', 1, '2026-11-23 09:46:20', '2026-11-23 09:46:27'),
-    (2, 'ENGR', 'College of Engineering', 'ENGR', 8, 'engr@sac.edu.ph', NULL, '#7B2C2C', 1, '2026-11-23 09:46:20', '2026-11-23 09:46:27'),
-    (3, 'BUS', 'College of Business Administration', 'BA', 14, 'bus@sac.edu.ph', NULL, '#7A4E12', 1, '2026-11-23 09:46:20', '2026-11-23 09:46:27'),
-    (4, 'EDU', 'College of Education', 'COED', 20, 'edu@sac.edu.ph', NULL, '#3D6B2A', 1, '2026-11-23 09:46:20', '2026-11-23 09:46:27'),
-    (5, 'HSS', 'College of Humanities & Social Sciences', 'CHSS', 26, 'hss@sac.edu.ph', NULL, '#5B2C6F', 1, '2026-11-23 09:46:20', '2026-11-23 09:46:27');
+    (1, 'CSM', 'College of Computer Science & Engineering', 'CSE', 2, 'csm@sac.edu.ph', NULL, '#808000', 1, '2026-11-23 09:46:20', '2026-11-23 09:46:27'),
+    (2, 'ENGR', 'College of Engineering', 'ENGR', 8, 'engr@sac.edu.ph', NULL, '#400040', 1, '2026-11-23 09:46:20', '2026-11-23 09:46:27'),
+    (3, 'BUS', 'College of Business Administration', 'BA', 14, 'bus@sac.edu.ph', NULL, '#008000', 1, '2026-11-23 09:46:20', '2026-11-23 09:46:27'),
+    (4, 'EDU', 'College of Education', 'COED', 20, 'edu@sac.edu.ph', NULL, '#000080', 1, '2026-11-23 09:46:20', '2026-11-23 09:46:27'),
+    (5, 'HSS', 'College of Humanities', 'CHSS', 26, 'hss@sac.edu.ph', NULL, '#AF640F', 1, '2026-11-23 09:46:20', '2026-11-23 09:46:27');
 
 -- ----------------------------------------------------------------------
 -- users (31 rows)
@@ -1274,10 +1274,10 @@ INSERT INTO `faculty_profiles` (`id`, `user_id`, `department_id`, `employment_ty
     (14, 23, 4, 'full_time', '24.0', 'College of Education', 'COED Faculty Room 2', 1, '2026-11-23 09:46:26', '2026-11-23 09:46:26'),
     (15, 24, 4, 'part_time', '18.0', 'College of Education', 'COED Faculty Room 3', 1, '2026-11-23 09:46:26', '2026-11-23 09:46:26'),
     (16, 25, 4, 'part_time', '18.0', 'College of Education', 'COED Faculty Room 4', 1, '2026-11-23 09:46:26', '2026-11-23 09:46:26'),
-    (17, 28, 5, 'full_time', '24.0', 'College of Humanities & Social Sciences', 'CHSS Faculty Room 1', 1, '2026-11-23 09:46:27', '2026-11-23 09:46:27'),
-    (18, 29, 5, 'full_time', '24.0', 'College of Humanities & Social Sciences', 'CHSS Faculty Room 2', 1, '2026-11-23 09:46:27', '2026-11-23 09:46:27'),
-    (19, 30, 5, 'part_time', '18.0', 'College of Humanities & Social Sciences', 'CHSS Faculty Room 3', 1, '2026-11-23 09:46:27', '2026-11-23 09:46:27'),
-    (20, 31, 5, 'part_time', '18.0', 'College of Humanities & Social Sciences', 'CHSS Faculty Room 4', 1, '2026-11-23 09:46:27', '2026-11-23 09:46:27');
+    (17, 28, 5, 'full_time', '24.0', 'College of Humanities', 'CHSS Faculty Room 1', 1, '2026-11-23 09:46:27', '2026-11-23 09:46:27'),
+    (18, 29, 5, 'full_time', '24.0', 'College of Humanities', 'CHSS Faculty Room 2', 1, '2026-11-23 09:46:27', '2026-11-23 09:46:27'),
+    (19, 30, 5, 'part_time', '18.0', 'College of Humanities', 'CHSS Faculty Room 3', 1, '2026-11-23 09:46:27', '2026-11-23 09:46:27'),
+    (20, 31, 5, 'part_time', '18.0', 'College of Humanities', 'CHSS Faculty Room 4', 1, '2026-11-23 09:46:27', '2026-11-23 09:46:27');
 
 -- ----------------------------------------------------------------------
 -- faculty_availability (0 rows)

@@ -83,6 +83,36 @@ final class DashboardController extends Controller
     }
 
     /**
+     * GET /analytics — the advanced analytics view (reuses the dashboard read
+     * models, presented in a focused analytics layout).
+     */
+    public function advanced(Request $request): Response
+    {
+        $authUser = $this->actor();
+        $semesterId = $this->semesterParam($request);
+        $overview = $this->dashboard->overview($authUser, $semesterId);
+        $rooms = $this->dashboard->roomUtilization($authUser, $semesterId);
+
+        $chartEndpoint = $this->router->url('dashboard.charts');
+        $selectedId = $overview['context']['semester'] === null
+            ? null
+            : (int) $overview['context']['semester']['id'];
+
+        if ($selectedId !== null) {
+            $chartEndpoint .= '?semester=' . $selectedId;
+        }
+
+        return $this->view('analytics/index', [
+            'title' => 'Advanced Analytics',
+            'auth_user' => $authUser,
+            'csrf_meta' => $this->csrfMeta(),
+            'chart_endpoint' => $chartEndpoint,
+            'current_route' => 'analytics.index',
+            'rooms' => $rooms,
+        ] + $overview)->withHeader('cache-control', 'no-store');
+    }
+
+    /**
      * `?semester=` as a positive int, or null when absent/unparseable.
      */
     private function semesterParam(Request $request): ?int

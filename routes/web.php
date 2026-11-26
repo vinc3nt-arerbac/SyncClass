@@ -99,6 +99,10 @@ return static function (Router $router, Container $container): void {
     $router->get('/api/dashboard', [DashboardController::class, 'charts'], ['auth'], 'Dashboard chart data')
         ->name('dashboard.charts');
 
+    // Advanced analytics view (reuses the dashboard read models).
+    $router->get('/analytics', [DashboardController::class, 'advanced'], ['auth', 'permission:schedules.view'], 'Advanced analytics')
+        ->name('analytics.index');
+
     // -----------------------------------------------------------------------
     // Private: staff directory (Phase 8). The route-level permission is the
     // ceiling; UserRepository applies the department/self scope to the rows.

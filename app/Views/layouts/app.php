@@ -101,6 +101,10 @@ $masterLinks = is_array($authUser)
             <a href="<?= $e($route('reports.index')) ?>"<?= $navCurrent(['reports']) ?>>Reports</a>
         <?php endif; ?>
 
+        <?php if (is_array($authUser) && $can('schedules.view')): ?>
+            <a href="<?= $e($route('analytics.index')) ?>"<?= $navCurrent(['analytics']) ?>>Analytics</a>
+        <?php endif; ?>
+
         <?php if ($masterLinks !== []): ?>
             <div class="nav-menu" data-nav-menu data-open="false">
                 <button class="nav-menu-toggle<?= $navCurrent(['master']) !== '' ? ' is-current' : '' ?>"
