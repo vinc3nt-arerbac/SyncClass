@@ -1,48 +1,17 @@
 <?php
 
-/**
- * SeederRunner
- *
- * CLI entry point to run all database seeders for SyncClass.
- * Usage: php database/seeders/SeederRunner.php
- *
- * @package Database\Seeders
- */
-
 declare(strict_types=1);
 
-namespace;
+/**
+ * SeederRunner — compatibility entry point.
+ *
+ * The demo dataset lives in `bin/seed-demo.php`, which is the supported seeder
+ * (see AGENTS.md: schema → RBAC → `php bin/seed-demo.php` → export). This file
+ * used to carry its own bootstrap and declared an empty `namespace;`, which is
+ * not valid PHP and made `php bin/lint.php` fail. It now simply delegates, so
+ * both commands seed the same rows through the same code path.
+ *
+ * Usage: php database/seeders/SeederRunner.php
+ */
 
-require __DIR__.'/../vendor/autoload.php';
-
-// Bootstrap the application
-$config = require __DIR__.'/../../config/bootstrap.php';
-
-$container = new \App\Core\Container();
-$router = new \App\Core\Router();
-
-// Base path for the application
-define('BASE_PATH', __DIR__);
-
-// Register core container bindings
-$container->instance('config', new \App\Core\Config($config));
-$container->instance('router', $router);
-$container->instance('db', new \App\Repositories\DatabaseRepository($config));
-
-echo "=" . str_repeat('=', 58) . "\n";
-echo "  SyncClass - Database Seeder Runner\n";
-echo "=" . str_repeat('=', 58) . "\n";
-echo "\n";
-
-// Initialize the main DatabaseSeeder
-$dbSeeder = new \Database\Seeders\DatabaseSeeder();
-$dbSeeder->run();
-
-echo "\n" . "=" . str_repeat('=', 58) . "\n";
-echo "  Seeding completed successfully!\n";
-echo "=" . str_repeat('=', 58) . "\n";
-echo "\n";
-echo "Demo login credentials:\n";
-echo "  admin@sac.edu.ph / SyncClass2026!   (System Administrator)\n";
-echo "  secretary.csm@sac.edu.ph / SyncClass2026!  (Department Secretary)\n";
-echo "\n";
+require dirname(__DIR__, 2) . '/bin/seed-demo.php';
