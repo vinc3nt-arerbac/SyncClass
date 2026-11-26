@@ -15,7 +15,7 @@
  * @var array<int, array{id: int, code: string, name: string, status: string, year_code: string}> $semesters
  * @var array<int, array{id: int, code: string, name: string}> $sections
  * @var array<int, array{id: int, code: string, title: string}> $subjects
- * @var array<int, array{id: int, name: string, department_id: int}> $faculty
+ * @var array<int, array{id: int, name: string, department_id: int, department_code: string}> $faculty
  * @var array<int, array{id: int, label: string}> $rooms
  * @var array<int, string> $days
  * @var array<int, string> $recurrences
@@ -89,7 +89,7 @@ $disabled = $can_edit ? '' : 'disabled';
                 <select name="faculty_id" required <?= $disabled ?>>
                     <?php foreach ($faculty as $profile): ?>
                         <option value="<?= $e($profile['id']) ?>" <?= (string) $value('faculty_id') === (string) $profile['id'] ? 'selected' : '' ?>>
-                            <?= $e($profile['name']) ?>
+                            <?= $e($profile['name'] . ' · ' . $profile['department_code']) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>

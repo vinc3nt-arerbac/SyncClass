@@ -165,6 +165,35 @@ final class FacultyRepository extends MasterDataRepository
     }
 
     /**
+     * Teacher choices for the add-class form, across every department.
+     *
+     * A teacher can be assigned to a section outside their home department, so
+     * this picker cannot use `options()` (which honours the actor's scope). The
+     * department code travels with each option so the form can show where the
+     * teacher is based while the secretary decides.
+     *
+     * @return array<int, array{id: int, name: string, department_id: int, department_code: string}>
+     */
+    public function schedulingOptions(): array
+    {
+        $rows = $this->database->select(
+            'SELECT f.id, f.department_id, d.code AS department_code, u.first_name, u.last_name
+               FROM faculty_profiles f
+               INNER JOIN users u ON u.id = f.user_id
+               INNER JOIN departments d ON d.id = f.department_id
+              WHERE f.is_active = 1
+              ORDER BY u.last_name, u.first_name'
+        );
+
+        return array_map(static fn (array $row): array => [
+            'id' => (int) $row['id'],
+            'name' => trim($row['first_name'] . ' ' . $row['last_name']),
+            'department_id' => (int) $row['department_id'],
+            'department_code' => (string) $row['department_code'],
+        ], $rows);
+    }
+
+    /**
      * Faculty accounts that do not have a profile yet.
      *
      * Only users whose role is `faculty` are eligible: a dean is a department

@@ -352,7 +352,7 @@ final class ScheduleController extends Controller
             'semesters' => $this->terms->semesterOptions(),
             'sections' => $this->sections->options($scope),
             'subjects' => $this->subjects->options($scope),
-            'faculty' => $this->faculty->options($scope),
+            'faculty' => $this->faculty->schedulingOptions(),
             'rooms' => $this->rooms->options(),
             'days' => (array) $this->config->get('schedule.days', []),
             'recurrences' => ScheduleRepository::RECURRENCES,

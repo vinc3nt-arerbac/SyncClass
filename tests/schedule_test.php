@@ -225,7 +225,7 @@ check('a break overlap is refused', http_status(fn () => $service->create($secre
 check('an adjacent break boundary is allowed', http_status(fn () => $service->create($secretaryScope, $meeting(['start_time' => '11:00', 'end_time' => '12:00', 'days' => [5]]), $secretary)) === null);
 check('a closed semester is refused', http_status(fn () => $service->create($secretaryScope, $meeting(['semester_id' => $closedSemester]), $secretary)) === 422);
 check('a subject from another department is refused', http_status(fn () => $service->create($secretaryScope, $meeting(['subject_id' => $subjectCba]), $secretary)) === 422);
-check('a teacher from another department is refused', http_status(fn () => $service->create($secretaryScope, $meeting(['faculty_id' => $profileCba]), $secretary)) === 422);
+check('a teacher from another department is allowed', (int) $service->resolve($secretaryScope, $meeting(['faculty_id' => $profileCba]))['faculty']['id'] === $profileCba);
 check('an inactive room is refused', http_status(function () use ($rooms, $lectureRoom, $service, $secretaryScope, $meeting, $secretary): void {
     $rooms->setActive($lectureRoom, false);
     try {

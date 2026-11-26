@@ -389,11 +389,10 @@ final class ScheduleService
             throw HttpException::unprocessable(['faculty_id' => 'Choose an active faculty profile.']);
         }
 
-        if ((int) $faculty['department_id'] !== (int) $section['department_id']) {
-            throw HttpException::unprocessable([
-                'faculty_id' => 'That teacher belongs to another department than the section.',
-            ]);
-        }
+        // Teachers may teach outside their home department (service teaching),
+        // so the profile's department is deliberately not compared with the
+        // section's. Room, capacity, section and time clashes are still
+        // enforced by the conflict engine afterwards.
 
         $room = $this->rooms->find((int) ($data['room_id'] ?? 0));
 
