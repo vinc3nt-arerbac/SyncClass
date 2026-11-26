@@ -31,6 +31,7 @@ Demo sign-ins (password `SyncClass2026!`): `admin@sac.edu.ph`,
 - [System Architecture](docs/ARCHITECTURE.md) — Phase 2: layers, modules, request lifecycle, conflict detection, generator, security, ADRs, roadmap
 - [Database Design](docs/DATABASE.md) — Phase 3: data dictionary, index strategy, business-rule enforcement, migration workflow
 - [Security Architecture](docs/SECURITY.md) — Phase 5: threat model, OWASP mapping, password/session/CSRF/validation primitives, hardening checklist
+- [ERP Import Mapping](docs/ERP_IMPORT.md) — which tables to copy from the school ERP, required columns, unique keys, load order and verification queries
 - [Entity-Relationship Diagram](database/schema/ERD.md) — 30 tables, cardinalities, referential actions
 
 ## Stack
