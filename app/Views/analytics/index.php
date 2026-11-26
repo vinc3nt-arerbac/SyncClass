@@ -47,20 +47,74 @@ foreach ($allRoomsByBuilding as $bc => &$rs) {
 }
 unset($rs);
 
+// Room -> department colour. A vacant room has no session of its own, so it
+// takes the colour of the department that books it most often this term.
+$roomDeptTally = [];
+$roomDeptColor = [];
+$deptColor = [];
+
+foreach ($week['cells'] as $byBand) {
+    foreach ($byBand as $sessions) {
+        foreach ($sessions as $session) {
+            $key = (string) $session['building'] . '|' . (string) $session['room'];
+            $dept = (string) $session['department'];
+            $roomDeptTally[$key][$dept] = ($roomDeptTally[$key][$dept] ?? 0) + 1;
+
+            if (!isset($deptColor[$dept]) && (string) $session['color'] !== '') {
+                $deptColor[$dept] = (string) $session['color'];
+            }
+        }
+    }
+}
+
+foreach ($roomDeptTally as $key => $tally) {
+    arsort($tally);
+    $roomDeptColor[$key] = $deptColor[(string) array_key_first($tally)] ?? '';
+}
+
 // For each day × band, derive the set of vacant rooms (labelled by building).
 $vacantBySlot = [];
+$bookedBySlot = [];
 $totalRooms = 0;
-
 
 foreach ($allRoomsByBuilding as $rs) {
     $totalRooms += count($rs);
 }
+
+// Room occupancy per day as clock intervals. `$week['cells']` groups sessions
+// by their exact start/end pair, so looking a band up by its key misses every
+// meeting that merely overlaps it (a 07:00–09:00 class also occupies the
+// 07:00–08:30 band). Compare the ranges instead of the keys.
+$bookedIntervals = [];
+
+foreach ($week['days'] as $day) {
+    $intervals = [];
+
+    foreach ($week['cells'][$day['index']] ?? [] as $sessions) {
+        foreach ($sessions as $session) {
+            $intervals[] = [
+                'key' => (string) $session['building'] . '|' . (string) $session['room'],
+                'start' => (string) $session['start'],
+                'end' => (string) $session['end'],
+            ];
+        }
+    }
+
+    $bookedIntervals[$day['index']] = $intervals;
+}
+
 foreach ($week['days'] as $day) {
     foreach ($week['bands'] as $band) {
+        $bandStart = (string) $band['start'];
+        $bandEnd = (string) $band['end'];
         $booked = [];
-        foreach ($week['cells'][$day['index']][$band['key']] ?? [] as $session) {
-            $booked[(string) $session['building'] . '|' . (string) $session['room']] = true;
+
+        foreach ($bookedIntervals[$day['index']] ?? [] as $interval) {
+            if ($interval['start'] < $bandEnd && $interval['end'] > $bandStart) {
+                $booked[$interval['key']] = true;
+            }
         }
+
         $vacant = [];
         foreach ($allRoomsByBuilding as $bCode => $rs) {
             foreach ($rs as $rCode => $rName) {
@@ -70,6 +124,7 @@ foreach ($week['days'] as $day) {
             }
         }
         $vacantBySlot[$day['index']][$band['key']] = $vacant;
+        $bookedBySlot[$day['index']][$band['key']] = count($booked);
     }
 }
 ?>
@@ -192,6 +247,7 @@ foreach ($week['days'] as $day) {
                     <?php endforeach; ?>
                 </ul>
             <?php endif; ?>
+            <p class="dash-muted dash-dept-note">Room labels use the colour of the department that books the room most this term.</p>
 
             <div class="dash-table-wrap">
                 <table class="dash-vacant-table">
@@ -199,7 +255,7 @@ foreach ($week['days'] as $day) {
                         <tr>
                             <th class="dash-vacant-timecol">Time</th>
                             <?php foreach ($week['days'] as $day): ?>
-                                <th><?= $e($day['short']) ?><br><span class="dash-muted"><?= $e($day['name']) ?></span></th>
+                                <th><?= $e($day['short']) ?><br><span class="dash-muted"><?= $e($day['label']) ?></span></th>
                             <?php endforeach; ?>
                         </tr>
                     </thead>
@@ -213,7 +269,7 @@ foreach ($week['days'] as $day) {
                                 <?php foreach ($week['days'] as $day): ?>
                                     <?php
                                         $vacant = $vacantBySlot[$day['index']][$band['key']] ?? [];
-                                        $occupiedCount = count($week['cells'][$day['index']][$band['key']] ?? []);
+                                        $occupiedCount = $bookedBySlot[$day['index']][$band['key']] ?? 0;
                                     ?>
                                     <td>
                                         <div class="dash-vacant-cell">
@@ -222,7 +278,11 @@ foreach ($week['days'] as $day) {
                                             </div>
                                             <ul class="dash-vacant-list">
                                                 <?php foreach ($vacant as $v): ?>
-                                                    <li class="dash-vacant-room">
+                                                    <?php
+                                                        $roomKey = (string) $v['building'] . '|' . (string) $v['room'];
+                                                        $chipColor = $roomDeptColor[$roomKey] ?? '';
+                                                    ?>
+                                                    <li class="dash-vacant-room"<?= $chipColor !== '' ? ' style="color: ' . $e($chipColor) . '; background: ' . $e($chipColor) . '14"' : '' ?>>
                                                         <span class="dash-vacant-bldg"><?= $e($v['building']) ?></span>
                                                         <span class="dash-vacant-roomcode"><?= $e($v['room']) ?></span>
                                                     </li>

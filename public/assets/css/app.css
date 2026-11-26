@@ -2625,8 +2625,9 @@ a.user-chip:focus-visible .user-name {
 .dash-vacant-cell { min-width: 150px; }
 .dash-vacant-count { font-weight: 600; color: var(--primary-maroon, #8c1d40); margin-bottom: .35rem; font-size: .8rem; }
 .dash-vacant-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .25rem; }
-.dash-vacant-room { display: inline-flex; align-items: center; gap: .2rem; padding: .15rem .4rem; border-radius: 6px; background: #eaf4ea; color: #1f5e2f; font-size: .78rem; }
+.dash-vacant-room { display: inline-flex; align-items: center; gap: .2rem; padding: .15rem .4rem; border-radius: 6px; background: #f3f0ea; color: #5b5148; font-size: .78rem; }
 .dash-vacant-bldg { font-weight: 700; }
+.dash-dept-note { margin: -.55rem 0 1rem; font-size: .8rem; }
 
 /* Advanced analytics: department colour key (shown inside the availability grid) */
 .dash-dept-legend { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; }
